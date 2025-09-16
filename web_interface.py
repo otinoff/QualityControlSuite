@@ -168,62 +168,60 @@ def render_header():
     st.markdown("""
     <div class="main-header">
         <h1>🧬 QualityControlSuite</h1>
-        <p>Система контроля качества биологических данных</p>
+        <p>QualityControlSuite - система контроля качества биологических данных</p>
     </div>
     """, unsafe_allow_html=True)
 
 def render_sidebar():
-    """Отображение боковой панели"""
+    """Отображение боковой панели - минималистичная версия"""
     with st.sidebar:
-        st.title("📋 Панель управления")
+        # Заголовок
+        st.markdown("""
+        <div style='text-align: center; padding: 1rem 0;'>
+            <h3 style='margin: 0;'>🧬 QualityControlSuite</h3>
+            <p style='margin: 0.5rem 0 0 0; font-size: 0.9rem; opacity: 0.8;'>v1.0.0</p>
+        </div>
+        """, unsafe_allow_html=True)
         
-        # Меню навигации
-        st.markdown("### 🗂️ Навигация")
-        page = st.selectbox(
-            "Выберите страницу",
-            ["🏠 Главная", "📊 Анализ файлов", "📈 Результаты", "⚙️ Настройки", "📚 Документация"]
-        )
+        st.divider()
         
-        # Статистика
-        st.markdown("### 📊 Статистика")
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Файлов обработано", len(st.session_state.processed_files))
-        with col2:
-            st.metric("Активных задач", 0)
+        # Информация о системе (всегда развернута)
+        st.markdown("### ℹ️ Информация о системе")
+        st.markdown("""
+        **Поддерживаемые форматы:**
+        - FASTQ / FASTQ.GZ
+        - BAM / SAM / CRAM
+        - VCF / VCF.GZ
         
-        # Быстрые действия
-        st.markdown("### ⚡ Быстрые действия")
-        if st.button("🔄 Очистить кэш", use_container_width=True):
-            st.session_state.processed_files = {}
-            st.session_state.current_results = None
-            st.success("Кэш очищен")
+        **Возможности анализа:**
+        - Валидация структуры файлов
+        - Расчет метрик качества
+        - Статистический анализ
+        - Визуализация данных
+        - Генерация отчётов (HTML, JSON, TXT)
         
-        # Информация о системе
-        st.markdown("### ℹ️ Информация")
-        st.info("""
-        **Версия:** 1.0.0  
-        **Лицензия:** MIT  
-        **Поддержка форматов:**
-        - FASTQ/FASTQ.GZ
-        - BAM/SAM/CRAM
-        - VCF/VCF.GZ
+        **Ресурсы:**
+        - [📚 Документация](https://github.com/otinoff/QualityControlSuite)
+        - [🐛 Сообщить об ошибке](https://github.com/otinoff/QualityControlSuite/issues)
+        - [💬 Техподдержка](mailto:support@qcs.com)
+        
+        ---
+        **© 2025 TaskContract2025**
+        **Лицензия:** MIT
         """)
-        
-        return page
 
 def render_home_page():
     """Отображение главной страницы"""
-    st.title("Добро пожаловать в QualityControlSuite")
+    st.title("Добро пожаловать!")
     
     # Описание системы
     col1, col2 = st.columns([2, 1])
     
     with col1:
         st.markdown("""
-        ### О системе
+        ### QualityControlSuite - система контроля качества биологических данных
         
-        **QualityControlSuite** - это минимальная система контроля качества биологических данных, 
+        Профессиональная система для анализа и контроля качества данных секвенирования,
         разработанная для проекта TaskContract2025.
         
         #### Ключевые возможности:
@@ -282,6 +280,44 @@ def render_home_page():
                 <p>Скачайте детальный отчёт с метриками качества</p>
             </div>
             """, unsafe_allow_html=True)
+    
+    # Последние результаты (если есть)
+    if st.session_state.processed_files:
+        st.markdown("---")
+        st.markdown("### 📊 Последние результаты")
+        
+        # Показываем последние 3 результата
+        recent_files = list(st.session_state.processed_files.items())[-3:]
+        cols = st.columns(len(recent_files) if recent_files else 1)
+        
+        for idx, (file_id, results) in enumerate(recent_files):
+            with cols[idx]:
+                with st.container():
+                    # Извлекаем имя файла
+                    filename = file_id.split('_')[0]
+                    status = results.get('quality_status', 'UNKNOWN')
+                    
+                    # Цветовая индикация статуса
+                    if status == 'PASS':
+                        st.success(f"✅ {filename[:20]}...")
+                    elif status == 'WARNING':
+                        st.warning(f"⚠️ {filename[:20]}...")
+                    elif status == 'FAIL':
+                        st.error(f"❌ {filename[:20]}...")
+                    else:
+                        st.info(f"❓ {filename[:20]}...")
+                    
+                    # Основные метрики
+                    metrics = results.get('metrics', {})
+                    if metrics:
+                        st.metric(
+                            "Ридов",
+                            f"{metrics.get('total_reads', 0):,}"
+                        )
+                        st.metric(
+                            "Q-оценка",
+                            f"{metrics.get('mean_quality', 0):.1f}"
+                        )
 
 def render_analysis_page():
     """Страница анализа файлов"""
@@ -302,9 +338,9 @@ def render_analysis_page():
         
         with col1:
             st.markdown("#### Общие параметры")
-            generate_plots = st.checkbox("Генерировать графики", value=True)
-            save_json = st.checkbox("Сохранить JSON отчёт", value=True)
-            save_html = st.checkbox("Сохранить HTML отчёт", value=True)
+            generate_plots = st.checkbox("Генерировать графики", value=True, key="analysis_generate_plots")
+            save_json = st.checkbox("Сохранить JSON отчёт", value=True, key="analysis_save_json")
+            save_html = st.checkbox("Сохранить HTML отчёт", value=True, key="analysis_save_html")
         
         with col2:
             st.markdown("#### Пороговые значения")
@@ -605,13 +641,13 @@ def render_settings_page():
     
     with col1:
         st.markdown("#### Форматы вывода")
-        generate_html = st.checkbox("HTML отчёт", value=True)
-        generate_json = st.checkbox("JSON отчёт", value=True)
-        generate_txt = st.checkbox("Текстовый отчёт", value=True)
+        generate_html = st.checkbox("HTML отчёт", value=True, key="settings_html_report")
+        generate_json = st.checkbox("JSON отчёт", value=True, key="settings_json_report")
+        generate_txt = st.checkbox("Текстовый отчёт", value=True, key="settings_txt_report")
     
     with col2:
         st.markdown("#### Визуализация")
-        generate_plots = st.checkbox("Генерировать графики", value=True)
+        generate_plots = st.checkbox("Генерировать графики", value=True, key="settings_generate_plots")
         plot_style = st.selectbox("Стиль графиков", ["plotly", "matplotlib"])
         plot_theme = st.selectbox("Тема", ["light", "dark", "auto"])
     
@@ -753,19 +789,27 @@ def main():
     # Отображение заголовка
     render_header()
     
-    # Отображение боковой панели и получение выбранной страницы
-    page = render_sidebar()
+    # Отображение боковой панели
+    render_sidebar()
     
-    # Отображение контента в зависимости от выбранной страницы
-    if page == "🏠 Главная":
-        render_home_page()
-    elif page == "📊 Анализ файлов":
+    # Создаем горизонтальные вкладки (без главной страницы)
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "📊 Анализ файлов",
+        "📈 Результаты",
+        "⚙️ Настройки",
+        "📚 Документация"
+    ])
+    
+    with tab1:
         render_analysis_page()
-    elif page == "📈 Результаты":
+    
+    with tab2:
         render_results_page()
-    elif page == "⚙️ Настройки":
+    
+    with tab3:
         render_settings_page()
-    elif page == "📚 Документация":
+    
+    with tab4:
         render_documentation_page()
     
     # Футер
