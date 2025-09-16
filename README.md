@@ -1,5 +1,7 @@
 # QualityControlSuite
 
+[![Deploy Status](https://github.com/otinoff/QualityControlSuite/actions/workflows/deploy.yml/badge.svg)](https://github.com/otinoff/QualityControlSuite/actions)
+
 Минимальная система контроля качества биологических данных для TaskContract2025.
 
 ## 🎯 Назначение
