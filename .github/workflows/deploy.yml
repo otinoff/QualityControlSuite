@@ -41,18 +41,25 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         port: ${{ secrets.SERVER_PORT }}
         script: |
-          # Переход в директорию проекта
-          cd /var/QualityControlSuite
+          # Проверка и создание директории проекта
+          PROJECT_DIR="/var/QualityControlSuite"
           
-          # Сохранение конфигурации (если есть локальные настройки)
-          if [ -f config/local_settings.yaml ]; then
-            cp config/local_settings.yaml /tmp/qc_local_settings.yaml
+          # Сохранение конфигурации (если есть)
+          if [ -d "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/config/local_settings.yaml" ]; then
+            cp $PROJECT_DIR/config/local_settings.yaml /tmp/qc_local_settings.yaml
           fi
           
-          # Обновление кода из репозитория
-          git fetch origin
-          git reset --hard origin/main
-          git pull origin main
+          # Удаление старой директории и клонирование заново
+          echo "Removing old directory and cloning fresh..."
+          sudo rm -rf $PROJECT_DIR
+          
+          # Клонирование репозитория
+          echo "Cloning repository..."
+          sudo git clone https://github.com/otinoff/QualityControlSuite.git $PROJECT_DIR
+          cd $PROJECT_DIR
+          
+          # Переключение на main ветку
+          git checkout main
           
           # Восстановление локальной конфигурации
           if [ -f /tmp/qc_local_settings.yaml ]; then
@@ -68,9 +75,10 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
           
-          # Установка прав доступа
-          chmod +x main.py
-          chmod -R 755 /var/QualityControlSuite
+          # Установка владельца и прав доступа
+          sudo chown -R www-data:www-data $PROJECT_DIR
+          sudo chmod +x $PROJECT_DIR/main.py
+          sudo chmod -R 755 $PROJECT_DIR
           
           # Перезапуск сервиса (если используется systemd)
           sudo systemctl restart qualitycontrolsuite || echo "Service not configured yet"
