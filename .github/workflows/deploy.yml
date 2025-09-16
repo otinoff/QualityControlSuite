@@ -49,17 +49,31 @@ jobs:
             cp $PROJECT_DIR/config/local_settings.yaml /tmp/qc_local_settings.yaml
           fi
           
-          # Удаление старой директории и клонирование заново
-          echo "Removing old directory and cloning fresh..."
-          sudo rm -rf $PROJECT_DIR
+          # Проверка существования директории и попытка обновления
+          if [ -d "$PROJECT_DIR/.git" ]; then
+            echo "Repository exists, attempting to update..."
+            cd $PROJECT_DIR
+            
+            # Попытка обновить через git
+            if sudo git fetch origin && sudo git reset --hard origin/main; then
+              echo "Successfully updated via git pull"
+            else
+              echo "Git update failed, re-cloning repository..."
+              cd /
+              sudo rm -rf $PROJECT_DIR
+              sudo git clone https://github.com/otinoff/QualityControlSuite.git $PROJECT_DIR
+              cd $PROJECT_DIR
+            fi
+          else
+            # Если директории нет или это не git репозиторий - клонируем
+            echo "Directory doesn't exist or not a git repo, cloning..."
+            sudo rm -rf $PROJECT_DIR
+            sudo git clone https://github.com/otinoff/QualityControlSuite.git $PROJECT_DIR
+            cd $PROJECT_DIR
+          fi
           
-          # Клонирование репозитория
-          echo "Cloning repository..."
-          sudo git clone https://github.com/otinoff/QualityControlSuite.git $PROJECT_DIR
-          cd $PROJECT_DIR
-          
-          # Переключение на main ветку
-          git checkout main
+          # Убеждаемся что мы на main ветке
+          sudo git checkout main
           
           # Восстановление локальной конфигурации
           if [ -f /tmp/qc_local_settings.yaml ]; then
