@@ -1,0 +1,41 @@
+# QualityControlSuite Configuration
+# Quality thresholds for biological data validation
+# Version: 1.0.0
+# Date: 16.12.2025
+
+# FASTQ Quality Control Thresholds
+fastq:
+  min_quality_score: 30        # Minimum Phred quality score
+  min_read_length: 50          # Minimum read length in bp
+  max_n_percentage: 5          # Maximum percentage of N bases
+  min_gc_content: 20           # Minimum GC content percentage
+  max_gc_content: 80           # Maximum GC content percentage
+
+# BAM/SAM/CRAM Quality Control Thresholds
+bam:
+  min_mapping_quality: 30      # Minimum mapping quality score
+  max_duplicate_rate: 30       # Maximum duplicate percentage
+  min_coverage: 10             # Minimum coverage depth
+  max_unmapped_rate: 10        # Maximum unmapped reads percentage
+
+# VCF Quality Control Thresholds
+vcf:
+  min_variant_quality: 30      # Minimum variant quality score
+  min_depth: 10                # Minimum read depth
+  max_missing_rate: 10         # Maximum missing data percentage
+  min_allele_frequency: 0.01   # Minimum allele frequency
+
+# Table (CSV/TSV) Quality Control Thresholds
+table:
+  max_missing_values: 20       # Maximum missing values percentage
+  outlier_threshold: 3         # Standard deviations for outlier detection
+  min_rows: 10                 # Minimum number of rows
+  min_columns: 2               # Minimum number of columns
+
+# Reporting Configuration
+reporting:
+  output_formats:
+    - json                     # JSON format reports
+    - html                     # HTML format reports
+  include_plots: true          # Include visualization plots
+  verbose: true                # Detailed reporting
