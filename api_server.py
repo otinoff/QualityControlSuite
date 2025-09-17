@@ -1,1 +1,0 @@
-# Файл удалён - используйте web_interface.py для Streamlit интерфейса
