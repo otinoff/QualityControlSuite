@@ -1,81 +1,104 @@
-name: Deploy to Server
+name: Deploy FastQCLI to Server
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
   workflow_dispatch:
+    inputs:
+      server_environment:
+        description: 'Server environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - production
+        - staging
+        - development
 
 jobs:
   test:
+    name: Test FastQCLI
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout Code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
     
-    - name: Set up Python
+    - name: Setup Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
     
-    - name: Install dependencies
+    - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install -r requirements_exe.txt
     
-    - name: Run tests
+    - name: Test Installation
       run: |
-        python -m pytest tests/ || echo "No tests found, skipping"
-
+        python -c "import sequali; print('Sequali OK')"
+        python -c "import streamlit; print('Streamlit OK')"
+        python -c "import fastqcli; print('FastQCLI OK')"
+    
+    - name: Run Unit Tests
+      run: |
+        python -m pytest tests/ -v || echo "No tests found or tests failed"
+  
   deploy:
+    name: Deploy to Server
     needs: test
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     
     steps:
-    - uses: actions/checkout@v3
-    
-    - name: Deploy to server
-      uses: appleboy/ssh-action@v0.1.5
+    - name: Checkout Code
+      uses: actions/checkout@v3
       with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: ${{ secrets.SERVER_PORT }}
-        script: |
-          # Переход в директорию проекта
-          cd /var/QualityControlSuite
-          
-          # Сохранение конфигурации (если есть локальные настройки)
-          if [ -f config/local_settings.yaml ]; then
-            cp config/local_settings.yaml /tmp/qc_local_settings.yaml
-          fi
-          
-          # Обновление кода из репозитория
-          git fetch origin
-          git reset --hard origin/main
-          git pull origin main
-          
-          # Восстановление локальной конфигурации
-          if [ -f /tmp/qc_local_settings.yaml ]; then
-            cp /tmp/qc_local_settings.yaml config/local_settings.yaml
-            rm /tmp/qc_local_settings.yaml
-          fi
-          
-          # Обновление зависимостей в виртуальном окружении
-          if [ ! -d "venv" ]; then
-            python3 -m venv venv
-          fi
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements.txt
-          
-          # Установка прав доступа
-          chmod +x main.py
-          chmod -R 755 /var/QualityControlSuite
-          
-          # Перезапуск сервиса (если используется systemd)
-          sudo systemctl restart qualitycontrolsuite || echo "Service not configured yet"
-          
-          # Проверка nginx конфигурации
-          sudo nginx -t && sudo systemctl reload nginx || echo "Nginx not configured yet"
-          
-          echo "Deployment completed successfully!"
+        fetch-depth: 0
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Make deployment script executable
+      run: chmod +x scripts/deploy_server.sh
+    
+    - name: Deploy to Production Server
+      if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.server_environment == 'production')
+      run: |
+        echo "Deploying to production server..."
+        ./scripts/deploy_server.sh
+      env:
+        SERVER_USER: ${{ secrets.SERVER_USER }}
+        SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        SERVER_PATH: ${{ secrets.SERVER_PATH }}
+        SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
+    
+    - name: Deploy to Staging Server
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.server_environment == 'staging'
+      run: |
+        echo "Deploying to staging server..."
+        # Staging deployment commands
+        echo "Staging deployment not yet configured"
+    
+    - name: Deploy to Development Server
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.server_environment == 'development'
+      run: |
+        echo "Deploying to development server..."
+        # Development deployment commands
+        echo "Development deployment not yet configured"
+    
+    - name: Create Release
+      if: github.event_name == 'push' && contains(github.ref, 'tags/v')
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        draft: false
+        prerelease: false
