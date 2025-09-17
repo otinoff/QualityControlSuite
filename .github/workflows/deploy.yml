@@ -45,47 +45,55 @@ jobs:
           # Проверка и создание директории проекта
           PROJECT_DIR="/var/QualityControlSuite"
           
+          # Создание директории если её нет
+          if [ ! -d "$PROJECT_DIR" ]; then
+            echo "Project directory doesn't exist, creating..."
+            sudo mkdir -p $PROJECT_DIR
+          fi
+          
           # Сохранение конфигурации (если есть)
           if [ -d "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/config/local_settings.yaml" ]; then
+            echo "Saving local configuration..."
             cp $PROJECT_DIR/config/local_settings.yaml /tmp/qc_local_settings.yaml
           fi
           
-          # Проверка существования директории и попытка обновления
-          if [ -d "$PROJECT_DIR/.git" ]; then
-            echo "Repository exists, attempting to update..."
-            cd $PROJECT_DIR
-            
-            # Попытка обновить через git
-            if sudo git fetch origin && sudo git reset --hard origin/master; then
-              echo "Successfully updated via git pull"
-            else
-              echo "Git update failed, re-cloning repository..."
-              cd /
-              sudo rm -rf $PROJECT_DIR
-              sudo git clone https://github.com/otinoff/QualityControlSuite.git $PROJECT_DIR
-              cd $PROJECT_DIR
-            fi
-          else
-            # Если директории нет или это не git репозиторий - клонируем
-            echo "Directory doesn't exist or not a git repo, cloning..."
-            sudo rm -rf $PROJECT_DIR
-            sudo git clone https://github.com/otinoff/QualityControlSuite.git $PROJECT_DIR
-            cd $PROJECT_DIR
-          fi
+          # Переход в директорию проекта
+          cd $PROJECT_DIR
           
-          # Убеждаемся что мы на master ветке
-          sudo git checkout master
+          # Проверка существования директории и попытка обновления
+          if [ -d ".git" ]; then
+            echo "Repository exists, updating via git..."
+            # Обновление через git pull
+            sudo git fetch origin
+            sudo git reset --hard origin/master
+            echo "Successfully updated via git"
+          else
+            # Если это не git репозиторий - инициализируем и клонируем
+            echo "Not a git repository, initializing..."
+            sudo rm -rf .[^.]* ..?* * 2>/dev/null || true  # Очистка директории
+            sudo git init
+            sudo git remote add origin https://github.com/otinoff/QualityControlSuite.git
+            sudo git fetch origin
+            sudo git reset --hard origin/master
+            sudo git branch -M master
+            echo "Repository initialized and cloned"
+          fi
           
           # Восстановление локальной конфигурации
           if [ -f /tmp/qc_local_settings.yaml ]; then
+            echo "Restoring local configuration..."
+            mkdir -p config
             cp /tmp/qc_local_settings.yaml config/local_settings.yaml
             rm /tmp/qc_local_settings.yaml
           fi
           
           # Обновление зависимостей в виртуальном окружении
           if [ ! -d "venv" ]; then
+            echo "Creating virtual environment..."
             python3 -m venv venv
           fi
+          
+          echo "Updating dependencies..."
           source venv/bin/activate
           pip install --upgrade pip
           pip install -r requirements.txt
