@@ -76,12 +76,12 @@ jobs:
         ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
           if [ -d '${{ secrets.SERVER_PATH }}' ]; then
             echo 'Directory exists, cleaning contents...'
-            cd ${{ secrets.SERVER_PATH }}
+            cd '${{ secrets.SERVER_PATH }}'
             rm -rf *
             echo 'Directory cleaned'
           else
             echo 'Directory does not exist, creating...'
-            mkdir -p ${{ secrets.SERVER_PATH }}
+            mkdir -p '${{ secrets.SERVER_PATH }}'
           fi
         "
     
@@ -92,11 +92,11 @@ jobs:
         tar -czf deploy_package.tar.gz fastqcli.py streamlit_*.py build_exe.py requirements*.txt run_streamlit.bat compile.bat test_files/ README*.md QUICK_START_RU.md scripts/ deploy_to_server.py deploy.bat 2>/dev/null || echo "Some files not found, continuing..."
         
         # Copy to server
-        scp -o StrictHostKeyChecking=no deploy_package.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:${{ secrets.SERVER_PATH }}/
+        scp -o StrictHostKeyChecking=no deploy_package.tar.gz ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:'${{ secrets.SERVER_PATH }}'/
         
         # Extract on server
         ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-          cd ${{ secrets.SERVER_PATH }}
+          cd '${{ secrets.SERVER_PATH }}'
           tar -xzf deploy_package.tar.gz
           rm deploy_package.tar.gz
         "
@@ -105,7 +105,7 @@ jobs:
       run: |
         echo "Installing dependencies on server..."
         ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-          cd ${{ secrets.SERVER_PATH }}
+          cd '${{ secrets.SERVER_PATH }}'
           export PATH=\$PATH:~/.local/bin
           python3 -m pip install --user --upgrade pip
           python3 -m pip install --user -r requirements.txt || echo 'requirements.txt not found or installation failed'
@@ -117,7 +117,7 @@ jobs:
       run: |
         echo "Testing server installation..."
         ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-          cd ${{ secrets.SERVER_PATH }}
+          cd '${{ secrets.SERVER_PATH }}'
           export PATH=\$PATH:~/.local/bin
           python3 -c 'import fastqcli; print(\"FastQCLI imported successfully\")'
           python3 -c 'import sequali; print(\"Sequali imported successfully\")'
@@ -128,7 +128,7 @@ jobs:
       run: |
         echo "Starting services..."
         ssh -o StrictHostKeyChecking=no ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "
-          cd ${{ secrets.SERVER_PATH }}
+          cd '${{ secrets.SERVER_PATH }}'
           # Add any service start commands here if needed
           echo 'Services started'
         "
