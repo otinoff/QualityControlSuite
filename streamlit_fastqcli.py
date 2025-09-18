@@ -18,6 +18,8 @@ import shutil
 from typing import Optional, Dict, List
 import uuid
 import logging
+import io
+import contextlib
 
 # Настройка логирования
 logging.basicConfig(
@@ -387,12 +389,37 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
         
         try:
             add_log(f"Вызов analyze_with_sequali с параметрами: file_path={file_path}, output_dir={report_dir}, save_json=False, save_html=True", "DEBUG")
-            success = analyze_with_sequali(
-                file_path,
-                output_dir=str(report_dir),
-                save_json=False,
-                save_html=True
-            )
+            
+            # Перехватываем stdout для отображения print() из fastqcli.py
+            captured_output = io.StringIO()
+            
+            with contextlib.redirect_stdout(captured_output):
+                success = analyze_with_sequali(
+                    file_path,
+                    output_dir=str(report_dir),
+                    save_json=False,
+                    save_html=True
+                )
+            
+            # Выводим перехваченный вывод в логи
+            stdout_content = captured_output.getvalue()
+            if stdout_content:
+                add_log("=== Вывод из analyze_with_sequali ===", "DEBUG")
+                for line in stdout_content.splitlines():
+                    if line.strip():  # Пропускаем пустые строки
+                        # Определяем уровень лога по содержимому
+                        if "[ERROR]" in line:
+                            add_log(line, "ERROR")
+                        elif "[WARNING]" in line or "[WARN]" in line:
+                            add_log(line, "WARNING")
+                        elif "[OK]" in line or "[SUCCESS]" in line:
+                            add_log(line, "SUCCESS")
+                        elif "[DEBUG]" in line:
+                            add_log(line, "DEBUG")
+                        else:
+                            add_log(line, "INFO")
+                add_log("=== Конец вывода ===", "DEBUG")
+            
             add_log(f"Результат вызова analyze_with_sequali: {success}")
         except Exception as e:
             add_log(f"Исключение при вызове analyze_with_sequali: {str(e)}", "ERROR")
