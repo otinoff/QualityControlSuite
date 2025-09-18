@@ -1,0 +1,29 @@
+# FastQCLI Configuration
+# Minimal configuration for FASTQ quality control
+
+# Quality thresholds
+quality:
+  min_q20_percentage: 90.0    # Minimum percentage of Q20+ bases for PASS
+  min_q30_percentage: 80.0    # Minimum percentage of Q30+ bases for PASS
+  min_avg_quality: 20.0        # Minimum average quality score
+
+# Content thresholds  
+content:
+  max_n_percentage: 5.0        # Maximum percentage of N bases
+  gc_content_min: 20.0         # Minimum GC content percentage
+  gc_content_max: 80.0         # Maximum GC content percentage
+
+# Processing options
+processing:
+  sample_size: 100000          # Number of reads to sample (0 = all reads)
+  buffer_size: 8192            # Buffer size for file reading
+  show_progress: true          # Show progress bar during analysis
+
+# Output options
+output:
+  formats:                     # Available output formats
+    - text                     # Console output
+    - json                     # JSON report
+    - html                     # HTML report
+  default_format: text         # Default output format
+  html_template: minimal       # HTML template style

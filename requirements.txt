@@ -1,0 +1,6 @@
+# FastQCLI Requirements
+# Minimal dependencies for FASTQ quality control
+
+click>=8.0.0       # CLI framework
+tqdm>=4.60.0       # Progress bars
+pyyaml>=5.4.0      # YAML configuration parsing

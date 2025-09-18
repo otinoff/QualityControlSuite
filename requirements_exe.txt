@@ -1,0 +1,10 @@
+# Зависимости для создания .exe файла
+pyinstaller>=5.0
+click>=8.0
+sequali
+streamlit
+plotly
+pandas
+
+# Дополнительные зависимости для полной функциональности
+pyinstaller-hooks-contrib
