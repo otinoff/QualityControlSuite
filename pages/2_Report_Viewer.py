@@ -138,7 +138,7 @@ def display_report_fullscreen(report_path: str, report_info: dict = None):
     with col3:
         # Кнопка возврата
         if st.button("🏠 На главную", type="primary", use_container_width=True):
-            st.switch_page("streamlit_advanced.py")
+            st.switch_page("streamlit_fastqcli.py")
     
     st.markdown("---")
     
@@ -195,7 +195,7 @@ def main():
         
         # Кнопка возврата на главную
         if st.button("🏠 Вернуться на главную", type="secondary"):
-            st.switch_page("streamlit_advanced.py")
+            st.switch_page("streamlit_fastqcli.py")
         
         st.markdown("---")
         
