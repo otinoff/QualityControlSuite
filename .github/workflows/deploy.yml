@@ -60,6 +60,9 @@ jobs:
           # Переход в директорию проекта
           cd $PROJECT_DIR
           
+          # Добавление директории в безопасный список Git (решение проблемы dubious ownership)
+          sudo git config --global --add safe.directory $PROJECT_DIR
+          
           # Проверка существования директории и попытка обновления
           if [ -d ".git" ]; then
             echo "Repository exists, updating via git..."
