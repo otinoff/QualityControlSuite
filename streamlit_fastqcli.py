@@ -332,7 +332,19 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
         st.error("Файл не найден в метаданных")
         return None
     
-    file_path = file_info["path"]
+    # Преобразуем путь в Path объект для кроссплатформенности
+    file_path = Path(file_info["path"])
+    
+    # Проверяем существование файла
+    if not file_path.exists():
+        # Пробуем абсолютный путь
+        file_path = file_path.resolve()
+        if not file_path.exists():
+            st.error(f"Файл не найден: {file_path}")
+            return None
+    
+    # Используем абсолютный путь для надежности
+    file_path = str(file_path.resolve())
     
     # Создаем уникальный ID для отчета
     report_id = str(uuid.uuid4())
@@ -385,6 +397,7 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
         
         # Запускаем анализ
         add_log("Запускаю analyze_with_sequali (HTML only)")
+        add_log(f"Проверка файла: существует={Path(file_path).exists()}, размер={Path(file_path).stat().st_size if Path(file_path).exists() else 'НЕ НАЙДЕН'} байт")
         add_log(f"Параметры вызова: file_path={file_path}, output_dir={report_dir}")
         
         try:
