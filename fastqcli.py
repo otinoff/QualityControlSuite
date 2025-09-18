@@ -17,7 +17,7 @@ import importlib.util
 # =============================================================================
 
 TOOL_NAME = "FastQCLI"
-VERSION = "3.0.0"
+VERSION = "3.0.1"
 POWERED_BY = "Sequali Engine"
 
 def print_banner():
@@ -191,15 +191,21 @@ def analyze_with_sequali(fastq_file, output_dir=None, save_json=True, save_html=
     cmd.append(str(file_path))
     
     print(f"[DEBUG] Команда для запуска: {' '.join(cmd)}")
+    print(f"[DEBUG] Абсолютный путь к файлу: {file_path.absolute()}")
+    print(f"[DEBUG] Размер файла: {file_path.stat().st_size} байт")
     
     try:
         # Запускаем Sequali
         print("[RUNNING] Запускаю анализ...")
+        print(f"[DEBUG] Рабочая директория: {Path.cwd()}")
+        print(f"[DEBUG] Файл существует: {file_path.exists()}")
+        print(f"[DEBUG] Размер файла: {file_path.stat().st_size if file_path.exists() else 'НЕ НАЙДЕН'}")
+        
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            check=True
+            check=False  # Изменяем на False, чтобы видеть все ошибки
         )
         
         print(f"[DEBUG] Return code: {result.returncode}")
@@ -214,6 +220,11 @@ def analyze_with_sequali(fastq_file, output_dir=None, save_json=True, save_html=
             print("[DEBUG] STDERR от Sequali:")
             for line in result.stderr.splitlines():
                 print(f"   {line}")
+        
+        # Проверяем код возврата
+        if result.returncode != 0:
+            print(f"[ERROR] Sequali вернул код ошибки: {result.returncode}")
+            # Продолжаем выполнение, чтобы посмотреть, что создалось
         
         # Удаляем временные файлы если они не нужны
         if not save_html:
@@ -239,19 +250,62 @@ def analyze_with_sequali(fastq_file, output_dir=None, save_json=True, save_html=
         else:
             print("   Директория пуста!")
         
+        # Если Sequali вернул ошибку, возвращаем False
+        if result.returncode != 0:
+            print("[ERROR] Sequali завершился с ошибкой")
+            return False
+        
         # Обрабатываем результаты
         results_generated = []
         
         # Проверяем HTML отчет (пробуем разные варианты имен)
         if save_html:
             html_found = False
-            for possible_name in [f"{full_name}.html", f"{base_name}.html"]:
-                html_file = output_path / possible_name
-                print(f"[DEBUG] Проверяю HTML: {html_file}")
-                if html_file.exists():
-                    results_generated.append(f"[HTML] Отчет: {html_file}")
+            
+            # Вариант 1: Ищем файл с именем full_name.html
+            html_file1 = output_path / f"{full_name}.html"
+            print(f"[DEBUG] Проверяю HTML вариант 1: {html_file1}")
+            if html_file1.exists() and html_file1.stat().st_size > 0:
+                results_generated.append(f"[HTML] Отчет: {html_file1}")
+                html_found = True
+            
+            # Вариант 2: Ищем файл с именем base_name.html
+            if not html_found:
+                html_file2 = output_path / f"{base_name}.html"
+                print(f"[DEBUG] Проверяю HTML вариант 2: {html_file2}")
+                if html_file2.exists() and html_file2.stat().st_size > 0:
+                    results_generated.append(f"[HTML] Отчет: {html_file2}")
                     html_found = True
-                    break
+            
+            # Вариант 3: Ищем файл с именем full_name (без расширения)
+            if not html_found:
+                html_file3 = output_path / f"{full_name}"
+                print(f"[DEBUG] Проверяю HTML вариант 3: {html_file3}")
+                if html_file3.exists() and html_file3.stat().st_size > 100000:  # Больше 100KB
+                    results_generated.append(f"[HTML] Отчет: {html_file3}")
+                    html_found = True
+            
+            # Вариант 4: Ищем файл с именем base_name (без расширения)
+            if not html_found:
+                html_file4 = output_path / f"{base_name}"
+                print(f"[DEBUG] Проверяю HTML вариант 4: {html_file4}")
+                if html_file4.exists() and html_file4.stat().st_size > 100000:  # Больше 100KB
+                    results_generated.append(f"[HTML] Отчет: {html_file4}")
+                    html_found = True
+            
+            # Вариант 5: Ищем самый большой файл без расширения
+            if not html_found:
+                print("[DEBUG] Поиск HTML файла по альтернативному методу")
+                # Ищем все файлы без расширения
+                all_files = [f for f in output_path.glob("*") if f.is_file() and not f.suffix]
+                if all_files:
+                    # Сортируем по размеру и берем самый большой
+                    all_files.sort(key=lambda f: f.stat().st_size, reverse=True)
+                    largest_file = all_files[0]
+                    print(f"[DEBUG] Найден крупный файл без расширения: {largest_file} ({largest_file.stat().st_size} байт)")
+                    if largest_file.stat().st_size > 100000:  # Больше 100KB
+                        results_generated.append(f"[HTML] Отчет: {largest_file}")
+                        html_found = True
             
             if not html_found and save_html:
                 print("[WARNING] HTML файл не найден после анализа")
@@ -259,10 +313,12 @@ def analyze_with_sequali(fastq_file, output_dir=None, save_json=True, save_html=
         # Проверяем и обрабатываем JSON (только если save_json=True)
         if save_json:
             json_found = False
-            for possible_name in [f"{full_name}.json", f"{base_name}.json"]:
-                json_file = output_path / possible_name
-                print(f"[DEBUG] Проверяю JSON: {json_file}")
-                if json_file.exists():
+            # Ищем все JSON файлы в директории
+            json_files = list(output_path.glob("*.json"))
+            print(f"[DEBUG] Найдено JSON файлов: {len(json_files)}")
+            for json_file in json_files:
+                print(f"[DEBUG] JSON файл: {json_file}")
+                if json_file.exists() and json_file.stat().st_size > 0:
                     results_generated.append(f"[JSON] Данные: {json_file}")
                     json_found = True
                     
@@ -273,7 +329,6 @@ def analyze_with_sequali(fastq_file, output_dir=None, save_json=True, save_html=
                             show_key_metrics(data)
                     except Exception as e:
                         print(f"[WARNING] Не удалось прочитать JSON: {e}")
-                    break
             
             if not json_found and save_json:
                 print("[WARNING] JSON файл не найден после анализа")
@@ -286,7 +341,7 @@ def analyze_with_sequali(fastq_file, output_dir=None, save_json=True, save_html=
             return True
         else:
             print("\n[WARNING] Анализ завершен, но файлы не найдены")
-            return True  # Все равно возвращаем True, так как команда выполнилась без ошибок
+            return False  # Возвращаем False если файлы не найдены
         
     except subprocess.CalledProcessError as e:
         print(f"[ERROR] Ошибка при запуске Sequali: {e}")

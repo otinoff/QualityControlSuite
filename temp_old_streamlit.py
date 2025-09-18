@@ -142,23 +142,7 @@ def load_metadata() -> Dict:
     if METADATA_FILE.exists():
         try:
             with open(METADATA_FILE, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Конвертируем строковые даты обратно в datetime объекты
-                for file_id, file_info in data.get("files", {}).items():
-                    if "upload_time" in file_info and isinstance(file_info["upload_time"], str):
-                        try:
-                            file_info["upload_time"] = datetime.fromisoformat(file_info["upload_time"])
-                        except:
-                            file_info["upload_time"] = datetime.now()
-                
-                for report_id, report_info in data.get("reports", {}).items():
-                    if "creation_time" in report_info and isinstance(report_info["creation_time"], str):
-                        try:
-                            report_info["creation_time"] = datetime.fromisoformat(report_info["creation_time"])
-                        except:
-                            report_info["creation_time"] = datetime.now()
-                
-                return data
+                return json.load(f)
         except:
             return {"files": {}, "reports": {}}
     return {"files": {}, "reports": {}}
@@ -166,27 +150,8 @@ def load_metadata() -> Dict:
 
 def save_metadata(metadata: Dict):
     """Сохранение метаданных в файл"""
-    # Создаем копию для сериализации
-    metadata_copy = {
-        "files": {},
-        "reports": {}
-    }
-    
-    # Конвертируем datetime в ISO строки для сохранения
-    for file_id, file_info in metadata.get("files", {}).items():
-        metadata_copy["files"][file_id] = file_info.copy()
-        if "upload_time" in metadata_copy["files"][file_id]:
-            if isinstance(metadata_copy["files"][file_id]["upload_time"], datetime):
-                metadata_copy["files"][file_id]["upload_time"] = metadata_copy["files"][file_id]["upload_time"].isoformat()
-    
-    for report_id, report_info in metadata.get("reports", {}).items():
-        metadata_copy["reports"][report_id] = report_info.copy()
-        if "creation_time" in metadata_copy["reports"][report_id]:
-            if isinstance(metadata_copy["reports"][report_id]["creation_time"], datetime):
-                metadata_copy["reports"][report_id]["creation_time"] = metadata_copy["reports"][report_id]["creation_time"].isoformat()
-    
     with open(METADATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(metadata_copy, f, indent=2, default=str)
+        json.dump(metadata, f, indent=2, default=str)
 
 
 def init_session_state():
@@ -305,19 +270,12 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
         
         # Запускаем анализ
         add_log("Запускаю analyze_with_sequali (HTML only)")
-        add_log(f"Параметры вызова: file_path={file_path}, output_dir={report_dir}")
-        
-        try:
-            success = analyze_with_sequali(
-                file_path,
-                output_dir=str(report_dir),
-                save_json=False,
-                save_html=True
-            )
-            add_log(f"Результат вызова analyze_with_sequali: {success}")
-        except Exception as e:
-            add_log(f"Исключение при вызове analyze_with_sequali: {str(e)}", "ERROR")
-            success = False
+        success = analyze_with_sequali(
+            file_path,
+            output_dir=str(report_dir),
+            save_json=False,
+            save_html=True
+        )
         
         elapsed_time = time.time() - start_time
         time_placeholder.metric("⏱️ Время", f"{elapsed_time:.1f} сек")
@@ -328,51 +286,12 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
             status_text.text("📊 Сохраняю отчет...")
             add_log("Анализ завершен успешно", "SUCCESS")
             
-            # Ищем HTML файл (пробуем разные варианты)
-            html_path = None
-            
-            # Проверяем все файлы в директории
-            all_files = list(report_dir.glob("*"))
-            add_log(f"Проверяю файлы в {report_dir}:", "DEBUG")
-            for f in all_files:
-                add_log(f"   - {f.name} ({f.stat().st_size} байт)", "DEBUG")
-            
-            # Вариант 1: Ищем файл с расширением .html
+            # Ищем HTML файл
             html_files = list(report_dir.glob("*.html"))
             if html_files:
                 html_path = html_files[0]
-                add_log(f"HTML отчет найден (вариант 1): {html_path.name}", "SUCCESS")
-            
-            # Вариант 2: Ищем большой файл без расширения .temp или .json (новый формат Sequali)
-            if html_path is None:
-                # Ищем файлы без расширения .temp или .json
-                candidate_files = [f for f in report_dir.glob("*")
-                                 if f.is_file() and not f.name.endswith(('.temp', '.json'))]
-                if candidate_files:
-                    # Сортируем по размеру и берем самый большой
-                    candidate_files.sort(key=lambda f: f.stat().st_size, reverse=True)
-                    largest_file = candidate_files[0]
-                    # Проверяем, что файл достаточно большой (предположительно HTML)
-                    if largest_file.stat().st_size > 1000000:  # Больше 1MB - точно HTML отчет
-                        html_path = largest_file
-                        add_log(f"HTML отчет найден (вариант 2): {html_path.name}", "SUCCESS")
-            
-            # Вариант 3: Если не нашли по первым двум вариантам, ищем самый большой файл без расширения .temp
-            if html_path is None:
-                # Ищем файлы без расширения .temp
-                candidate_files = [f for f in report_dir.glob("*")
-                                 if f.is_file() and not f.name.endswith('.temp')]
-                if candidate_files:
-                    # Сортируем по размеру и берем самый большой
-                    candidate_files.sort(key=lambda f: f.stat().st_size, reverse=True)
-                    largest_file = candidate_files[0]
-                    # Проверяем, что файл достаточно большой
-                    if largest_file.stat().st_size > 100000:  # Больше 100KB
-                        html_path = largest_file
-                        add_log(f"HTML отчет найден (вариант 3): {html_path.name}", "SUCCESS")
-            
-            if html_path and html_path.exists():
-                add_log(f"Использую HTML отчет: {html_path}", "SUCCESS")
+                add_log(f"HTML отчет найден: {html_path.name}", "SUCCESS")
+                
                 # Обновляем метаданные
                 st.session_state.metadata["reports"][report_id] = {
                     "file_id": file_id,
@@ -394,14 +313,11 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
                 return report_id
             else:
                 add_log("HTML отчет не найден", "ERROR")
-                # Дополнительная диагностика
-                add_log(f"Директория отчета: {report_dir}", "DEBUG")
-                add_log(f"Файлы в директории: {[f.name for f in report_dir.glob('*')]}", "DEBUG")
                 return None
         else:
             progress_bar.progress(100)
             status_text.text("")
-            add_log("Ошибка при анализе - функция analyze_with_sequali вернула False", "ERROR")
+            add_log("Ошибка при анализе", "ERROR")
             return None
             
     except Exception as e:
@@ -525,22 +441,9 @@ def render_files_history_tab():
         return
     
     # Сортируем файлы по времени загрузки (новые сверху)
-    def get_file_time(item):
-        upload_time = item[1].get("upload_time", None)
-        if upload_time is None:
-            return datetime.min
-        if isinstance(upload_time, str):
-            try:
-                return datetime.fromisoformat(upload_time)
-            except:
-                return datetime.min
-        if isinstance(upload_time, datetime):
-            return upload_time
-        return datetime.min
-    
     sorted_files = sorted(
         files.items(),
-        key=get_file_time,
+        key=lambda x: x[1].get("upload_time", datetime.min),
         reverse=True
     )
     
@@ -616,22 +519,9 @@ def render_reports_registry_tab():
         return
     
     # Сортируем отчеты по времени создания (новые сверху)
-    def get_report_time(item):
-        creation_time = item[1].get("creation_time", None)
-        if creation_time is None:
-            return datetime.min
-        if isinstance(creation_time, str):
-            try:
-                return datetime.fromisoformat(creation_time)
-            except:
-                return datetime.min
-        if isinstance(creation_time, datetime):
-            return creation_time
-        return datetime.min
-    
     sorted_reports = sorted(
         reports.items(),
-        key=get_report_time,
+        key=lambda x: x[1].get("creation_time", datetime.min),
         reverse=True
     )
     
@@ -707,7 +597,7 @@ def render_sidebar():
     """Боковая панель"""
     with st.sidebar:
         st.markdown("### 🧬 FastQCLI Advanced")
-        st.caption("v3.0.2 | Extended Features")
+        st.caption("v3.0.0 | Extended Features")
         
         st.divider()
         
@@ -879,7 +769,7 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: #666; padding: 1rem;'>
-        <p>FastQCLI Advanced v3.0.2 | Extended Features | © 2025 TaskContract2025</p>
+        <p>FastQCLI Advanced v3.0.0 | Extended Features | © 2025 TaskContract2025</p>
     </div>
     """, unsafe_allow_html=True)
 
