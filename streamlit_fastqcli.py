@@ -360,7 +360,8 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
             file_path = file_path.resolve()
             if not file_path.exists():
                 st.error(f"Файл не найден: {file_path}")
-                add_log(f"Файл не найден. Пробовал пути: {path_str}, {file_path}", "ERROR")
+                # add_log доступен только внутри функции, поэтому используем logger
+                logger.error(f"Файл не найден. Пробовал пути: {path_str}, {file_path}")
                 return None
     
     # Используем абсолютный путь для надежности, с posix-style для кроссплатформенности
