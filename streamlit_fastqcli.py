@@ -1,27 +1,26 @@
 """
-FastQCLI Streamlit Interface
-Веб-интерфейс для анализа качества FASTQ файлов на основе Sequali
-Версия: 1.0.0
+FastQCLI Advanced Streamlit Interface
+Веб-интерфейс с системой хранения файлов, реестром отчетов и полноэкранным просмотром
+Версия: 3.0.0
 """
 
 import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
+import streamlit.components.v1 as components
 from pathlib import Path
-import json
 import sys
 import os
 from datetime import datetime
 import tempfile
-import shutil
-import subprocess
 import time
-from typing import Dict, Any, Optional
+import json
+import hashlib
+import shutil
+from typing import Optional, Dict, List
+import uuid
 
 # Настройка страницы
 st.set_page_config(
-    page_title="FastQCLI - Sequali",
+    page_title="FastQCLI Advanced",
     page_icon="🧬",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -32,38 +31,29 @@ try:
     from fastqcli import (
         check_and_install_sequali,
         analyze_with_sequali,
-        has_command,
-        is_package_installed
+        has_command
     )
     FASTQCLI_AVAILABLE = True
 except ImportError:
     FASTQCLI_AVAILABLE = False
     st.error("⚠️ Файл fastqcli.py не найден! Скопируйте его в текущую директорию.")
 
+# Константы
+DATA_DIR = Path("data")
+UPLOADED_FILES_DIR = DATA_DIR / "uploaded_files"
+REPORTS_DIR = DATA_DIR / "reports"
+METADATA_FILE = DATA_DIR / "metadata.json"
+
 # CSS стили
 st.markdown("""
 <style>
-    :root {
-        --primary-blue: #2B5AA0;
-        --teal-dark: #1B5E5E;
-        --accent-red: #D73527;
-        --success-green: #28A745;
-        --warning-yellow: #FD7E14;
-        --background: #FFFFFF;
-        --light-bg: #F8F9FA;
-        --text-primary: #333333;
-        --border-color: #E5E5E5;
-        --shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
     .main-header {
         text-align: center;
         padding: 2rem 1rem;
-        background: linear-gradient(135deg, #2B5AA0 0%, #1B5E5E 100%);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         color: white;
-        border-radius: 8px;
+        border-radius: 10px;
         margin-bottom: 2rem;
-        box-shadow: var(--shadow);
     }
     
     .main-header h1 {
@@ -75,162 +65,634 @@ st.markdown("""
     .main-header p {
         font-size: 1.1rem;
         opacity: 0.95;
-        margin: 0;
     }
     
-    .status-card {
-        background: var(--background);
-        padding: 1.2rem;
+    .file-card {
+        background: white;
+        padding: 1.5rem;
         border-radius: 8px;
-        box-shadow: var(--shadow);
-        border: 1px solid var(--border-color);
-        margin-bottom: 1rem;
+        margin: 1rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border-left: 4px solid #667eea;
     }
     
-    .metric-card {
-        background: var(--background);
+    .report-card {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin: 1rem 0;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        border-left: 4px solid #28a745;
+    }
+    
+    .metrics-container {
+        background: #f7f7f7;
         padding: 1rem;
         border-radius: 8px;
-        box-shadow: var(--shadow);
-        border-left: 4px solid var(--primary-blue);
-        margin-bottom: 1rem;
+        margin: 1rem 0;
     }
     
-    .quality-pass {
+    .success-message {
         background: #d4edda;
         color: #155724;
-        padding: 0.5rem 1rem;
+        padding: 1rem;
         border-radius: 6px;
-        font-weight: 600;
+        border-left: 4px solid #28a745;
     }
     
-    .quality-warning {
-        background: #fff3cd;
-        color: #856404;
-        padding: 0.5rem 1rem;
-        border-radius: 6px;
-        font-weight: 600;
-    }
-    
-    .quality-fail {
+    .error-message {
         background: #f8d7da;
         color: #721c24;
-        padding: 0.5rem 1rem;
+        padding: 1rem;
         border-radius: 6px;
-        font-weight: 600;
+        border-left: 4px solid #dc3545;
     }
     
-    .speed-indicator {
-        color: var(--primary-blue);
-        font-weight: bold;
-        font-size: 1.2rem;
+    .fullscreen-iframe {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 9999;
+        background: white;
     }
     
-    [data-testid="stSidebar"] {
-        background-color: var(--light-bg);
-    }
-    
-    .stButton>button {
-        background-color: var(--primary-blue);
-        color: white;
-        border: none;
-        padding: 0.5rem 1.5rem;
-        border-radius: 6px;
-        font-weight: 500;
-        transition: all 0.3s ease;
-    }
-    
-    .stButton>button:hover {
-        background-color: #1a4a8a;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    .tab-content {
+        padding: 1rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# Инициализация session state
-if 'analysis_history' not in st.session_state:
-    st.session_state.analysis_history = []
-if 'sequali_installed' not in st.session_state:
-    st.session_state.sequali_installed = False
-if 'current_results' not in st.session_state:
-    st.session_state.current_results = None
+
+def init_directories():
+    """Инициализация директорий для хранения данных"""
+    UPLOADED_FILES_DIR.mkdir(parents=True, exist_ok=True)
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def get_file_hash(file_content: bytes) -> str:
+    """Получение хеша файла для проверки уникальности"""
+    return hashlib.md5(file_content).hexdigest()
+
+
+def load_metadata() -> Dict:
+    """Загрузка метаданных из файла"""
+    if METADATA_FILE.exists():
+        try:
+            with open(METADATA_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return {"files": {}, "reports": {}}
+    return {"files": {}, "reports": {}}
+
+
+def save_metadata(metadata: Dict):
+    """Сохранение метаданных в файл"""
+    with open(METADATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, default=str)
+
+
+def init_session_state():
+    """Инициализация session state"""
+    if 'sequali_installed' not in st.session_state:
+        st.session_state.sequali_installed = False
+    
+    if 'metadata' not in st.session_state:
+        st.session_state.metadata = load_metadata()
+    
+    if 'current_tab' not in st.session_state:
+        st.session_state.current_tab = "new_analysis"
+    
+    
+    if 'analysis_in_progress' not in st.session_state:
+        st.session_state.analysis_in_progress = False
+
+
+def save_uploaded_file(uploaded_file) -> Optional[str]:
+    """Сохранение загруженного файла"""
+    try:
+        # Получаем содержимое файла
+        file_content = uploaded_file.getbuffer()
+        file_hash = get_file_hash(file_content)
+        
+        # Проверяем, не загружен ли уже такой файл
+        for file_id, file_info in st.session_state.metadata.get("files", {}).items():
+            if file_info.get("hash") == file_hash:
+                st.info(f"📌 Файл уже существует в истории: {file_info['filename']}")
+                return file_id
+        
+        # Создаем уникальный ID для файла
+        file_id = str(uuid.uuid4())
+        
+        # Сохраняем файл
+        file_path = UPLOADED_FILES_DIR / f"{file_id}_{uploaded_file.name}"
+        with open(file_path, 'wb') as f:
+            f.write(file_content)
+        
+        # Добавляем в метаданные
+        st.session_state.metadata["files"][file_id] = {
+            "filename": uploaded_file.name,
+            "path": str(file_path),
+            "size_mb": len(file_content) / (1024 * 1024),
+            "upload_time": datetime.now(),
+            "hash": file_hash,
+            "analysis_count": 0
+        }
+        
+        save_metadata(st.session_state.metadata)
+        return file_id
+        
+    except Exception as e:
+        st.error(f"Ошибка при сохранении файла: {str(e)}")
+        return None
+
+
+def run_analysis_with_save(file_id: str) -> Optional[str]:
+    """Запуск анализа с сохранением отчета"""
+    
+    file_info = st.session_state.metadata["files"].get(file_id)
+    if not file_info:
+        st.error("Файл не найден в метаданных")
+        return None
+    
+    file_path = file_info["path"]
+    
+    # Создаем уникальный ID для отчета
+    report_id = str(uuid.uuid4())
+    report_dir = REPORTS_DIR / report_id
+    report_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Контейнер для логов
+    log_container = st.expander("🔍 Подробные логи анализа", expanded=True)
+    logs = []
+    
+    def add_log(message: str, level: str = "INFO"):
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        log_msg = f"[{timestamp}] [{level}] {message}"
+        logs.append(log_msg)
+        with log_container:
+            if level == "ERROR":
+                st.error(log_msg)
+            elif level == "WARNING":
+                st.warning(log_msg)
+            elif level == "SUCCESS":
+                st.success(log_msg)
+            else:
+                st.text(log_msg)
+    
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    try:
+        # Начало анализа
+        add_log(f"Начинаю анализ файла: {file_info['filename']}")
+        add_log(f"ID файла: {file_id}")
+        add_log(f"Директория отчета: {report_dir}")
+        
+        status_text.text("🚀 Запускаю анализ Sequali...")
+        progress_bar.progress(20)
+        
+        # Показываем метрики
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("📁 Размер файла", f"{file_info['size_mb']:.1f} MB")
+        with col2:
+            st.metric("📊 Анализов", file_info.get('analysis_count', 0) + 1)
+        with col3:
+            time_placeholder = st.empty()
+            time_placeholder.metric("⏱️ Время", "0 сек")
+        
+        progress_bar.progress(40)
+        
+        start_time = time.time()
+        
+        # Запускаем анализ
+        add_log("Запускаю analyze_with_sequali (HTML only)")
+        success = analyze_with_sequali(
+            file_path,
+            output_dir=str(report_dir),
+            save_json=False,
+            save_html=True
+        )
+        
+        elapsed_time = time.time() - start_time
+        time_placeholder.metric("⏱️ Время", f"{elapsed_time:.1f} сек")
+        
+        progress_bar.progress(80)
+        
+        if success:
+            status_text.text("📊 Сохраняю отчет...")
+            add_log("Анализ завершен успешно", "SUCCESS")
+            
+            # Ищем HTML файл
+            html_files = list(report_dir.glob("*.html"))
+            if html_files:
+                html_path = html_files[0]
+                add_log(f"HTML отчет найден: {html_path.name}", "SUCCESS")
+                
+                # Обновляем метаданные
+                st.session_state.metadata["reports"][report_id] = {
+                    "file_id": file_id,
+                    "filename": file_info['filename'],
+                    "report_path": str(html_path),
+                    "creation_time": datetime.now(),
+                    "elapsed_time": elapsed_time,
+                    "status": "SUCCESS"
+                }
+                
+                # Увеличиваем счетчик анализов
+                st.session_state.metadata["files"][file_id]["analysis_count"] += 1
+                
+                save_metadata(st.session_state.metadata)
+                
+                progress_bar.progress(100)
+                status_text.text("")
+                
+                return report_id
+            else:
+                add_log("HTML отчет не найден", "ERROR")
+                return None
+        else:
+            progress_bar.progress(100)
+            status_text.text("")
+            add_log("Ошибка при анализе", "ERROR")
+            return None
+            
+    except Exception as e:
+        progress_bar.progress(100)
+        status_text.text("")
+        add_log(f"Критическая ошибка: {str(e)}", "ERROR")
+        st.error(f"❌ Критическая ошибка: {str(e)}")
+        return None
+
+
+def display_html_report_fullscreen(report_path: str):
+    """Отображение HTML отчета на весь экран"""
+    try:
+        with open(report_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Добавляем кнопку закрытия
+        close_button = """
+        <div style='position: fixed; top: 10px; right: 10px; z-index: 10000;'>
+            <button onclick='window.parent.postMessage("close_fullscreen", "*")' 
+                    style='background: #dc3545; color: white; border: none; 
+                           padding: 10px 20px; border-radius: 5px; cursor: pointer;
+                           font-size: 16px; font-weight: bold;'>
+                ✕ Закрыть
+            </button>
+        </div>
+        """
+        
+        # Встраиваем отчет с кнопкой закрытия
+        components.html(
+            close_button + html_content,
+            height=1000,
+            scrolling=True
+        )
+        
+    except Exception as e:
+        st.error(f"Ошибка при отображении отчета: {str(e)}")
 
 
 def render_header():
     """Отображение заголовка"""
     st.markdown("""
     <div class="main-header">
-        <h1>🧬 FastQCLI - Powered by Sequali</h1>
-        <p>Высокопроизводительный анализ качества FASTQ файлов (300+ MB/sec)</p>
+        <h1>🧬 FastQCLI Advanced</h1>
+        <p>Система анализа FASTQ файлов с историей и реестром отчетов</p>
     </div>
     """, unsafe_allow_html=True)
 
 
+def render_new_analysis_tab():
+    """Вкладка нового анализа"""
+    st.markdown("### 📁 Загрузка и анализ нового файла")
+    
+    uploaded_file = st.file_uploader(
+        "Выберите FASTQ файл для анализа",
+        type=['fastq', 'fq', 'gz'],
+        help="Поддерживаются форматы: .fastq, .fq, .fastq.gz, .fq.gz"
+    )
+    
+    if uploaded_file is not None:
+        st.markdown("---")
+        
+        # Информация о файле
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.markdown(f"**Файл:** {uploaded_file.name}")
+        with col2:
+            file_size_mb = uploaded_file.size / (1024 * 1024)
+            st.markdown(f"**Размер:** {file_size_mb:.2f} MB")
+        with col3:
+            estimated_time = file_size_mb / 300
+            st.markdown(f"**Оценка:** ~{estimated_time:.1f} сек")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🚀 Начать анализ", type="primary", use_container_width=True):
+                st.session_state.analysis_in_progress = True
+                
+                # Сохраняем файл
+                file_id = save_uploaded_file(uploaded_file)
+                
+                if file_id:
+                    st.success(f"✅ Файл сохранен с ID: {file_id}")
+                    
+                    # Запускаем анализ
+                    st.markdown("---")
+                    report_id = run_analysis_with_save(file_id)
+                    
+                    if report_id:
+                        st.markdown("---")
+                        st.markdown('<div class="success-message">✅ Анализ завершен успешно!</div>', 
+                                   unsafe_allow_html=True)
+                        
+                        report_info = st.session_state.metadata["reports"][report_id]
+                        
+                        # Кнопка просмотра отчета - теперь сразу открываем конкретный отчет
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("📊 Открыть отчет", type="primary", use_container_width=True):
+                                st.query_params["report_id"] = report_id
+                                st.switch_page("pages/2_Report_Viewer.py")
+                        with col2:
+                            if st.button("📋 К реестру отчетов", type="secondary", use_container_width=True):
+                                st.query_params.clear()
+                                st.switch_page("pages/2_Report_Viewer.py")
+                    else:
+                        st.error("❌ Не удалось выполнить анализ")
+                
+                st.session_state.analysis_in_progress = False
+
+
+def render_files_history_tab():
+    """Вкладка истории файлов"""
+    st.markdown("### 📂 История загруженных файлов")
+    
+    files = st.session_state.metadata.get("files", {})
+    
+    if not files:
+        st.info("История файлов пуста. Загрузите файлы во вкладке 'Новый анализ'.")
+        return
+    
+    # Сортируем файлы по времени загрузки (новые сверху)
+    sorted_files = sorted(
+        files.items(),
+        key=lambda x: x[1].get("upload_time", datetime.min),
+        reverse=True
+    )
+    
+    for file_id, file_info in sorted_files:
+        with st.container():
+            st.markdown(f"""
+            <div class="file-card">
+                <h4>📄 {file_info['filename']}</h4>
+                <p><strong>ID:</strong> {file_id[:8]}...</p>
+                <p><strong>Размер:</strong> {file_info['size_mb']:.2f} MB</p>
+                <p><strong>Загружен:</strong> {file_info['upload_time']}</p>
+                <p><strong>Анализов выполнено:</strong> {file_info.get('analysis_count', 0)}</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button(f"🔄 Повторный анализ", key=f"reanalyze_{file_id}"):
+                    st.markdown("---")
+                    st.info(f"Запускаю повторный анализ файла {file_info['filename']}...")
+                    report_id = run_analysis_with_save(file_id)
+                    
+                    if report_id:
+                        st.success("✅ Повторный анализ завершен!")
+                        report_info = st.session_state.metadata["reports"][report_id]
+                        
+                        if st.button(f"📊 Открыть отчет", key=f"view_report_{report_id}"):
+                            st.query_params["report_id"] = report_id
+                            st.switch_page("pages/2_Report_Viewer.py")
+                    else:
+                        st.error("❌ Ошибка при повторном анализе")
+            
+            with col2:
+                # Проверяем существование файла
+                if Path(file_info['path']).exists():
+                    st.success("✅ Файл доступен")
+                else:
+                    st.error("❌ Файл не найден")
+            
+            with col3:
+                if st.button(f"🗑️ Удалить", key=f"delete_{file_id}"):
+                    # Удаляем файл
+                    try:
+                        if Path(file_info['path']).exists():
+                            Path(file_info['path']).unlink()
+                        del st.session_state.metadata["files"][file_id]
+                        
+                        # Удаляем связанные отчеты
+                        reports_to_delete = []
+                        for report_id, report_info in st.session_state.metadata["reports"].items():
+                            if report_info.get("file_id") == file_id:
+                                reports_to_delete.append(report_id)
+                        
+                        for report_id in reports_to_delete:
+                            del st.session_state.metadata["reports"][report_id]
+                        
+                        save_metadata(st.session_state.metadata)
+                        st.success("✅ Файл удален")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Ошибка при удалении: {str(e)}")
+
+
+def render_reports_registry_tab():
+    """Вкладка реестра отчетов"""
+    st.markdown("### 📊 Реестр отчетов")
+    
+    reports = st.session_state.metadata.get("reports", {})
+    
+    if not reports:
+        st.info("Реестр отчетов пуст. Выполните анализ файлов для создания отчетов.")
+        return
+    
+    # Сортируем отчеты по времени создания (новые сверху)
+    sorted_reports = sorted(
+        reports.items(),
+        key=lambda x: x[1].get("creation_time", datetime.min),
+        reverse=True
+    )
+    
+    # Фильтры
+    col1, col2 = st.columns(2)
+    with col1:
+        search_query = st.text_input("🔍 Поиск по имени файла", "")
+    
+    # Фильтрация
+    if search_query:
+        sorted_reports = [(rid, rinfo) for rid, rinfo in sorted_reports 
+                         if search_query.lower() in rinfo.get("filename", "").lower()]
+    
+    # Статистика
+    st.markdown(f"**Всего отчетов:** {len(sorted_reports)}")
+    
+    for report_id, report_info in sorted_reports:
+        with st.container():
+            status_color = "#28a745" if report_info.get("status") == "SUCCESS" else "#dc3545"
+            
+            st.markdown(f"""
+            <div class="report-card">
+                <h4>📊 Отчет для: {report_info['filename']}</h4>
+                <p><strong>ID отчета:</strong> {report_id[:8]}...</p>
+                <p><strong>Создан:</strong> {report_info.get('creation_time', 'Неизвестно')}</p>
+                <p><strong>Время анализа:</strong> {report_info.get('elapsed_time', 0):.1f} сек</p>
+                <p><strong>Статус:</strong> <span style="color: {status_color}; font-weight: bold;">
+                    {report_info.get('status', 'UNKNOWN')}</span></p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if st.button(f"👁️ Открыть полноэкранно", key=f"view_{report_id}"):
+                    st.query_params["report_id"] = report_id
+                    st.switch_page("pages/2_Report_Viewer.py")
+            
+            with col2:
+                # Скачать отчет
+                if Path(report_info["report_path"]).exists():
+                    with open(report_info["report_path"], 'r', encoding='utf-8') as f:
+                        html_content = f.read()
+                    
+                    st.download_button(
+                        label="📥 Скачать",
+                        data=html_content,
+                        file_name=f"report_{report_info['filename']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html",
+                        mime="text/html",
+                        key=f"download_{report_id}"
+                    )
+                else:
+                    st.error("Файл отчета не найден")
+            
+            with col3:
+                if st.button(f"🗑️ Удалить", key=f"delete_report_{report_id}"):
+                    try:
+                        # Удаляем файл отчета
+                        report_path = Path(report_info["report_path"])
+                        if report_path.exists():
+                            # Удаляем директорию отчета
+                            shutil.rmtree(report_path.parent)
+                        
+                        del st.session_state.metadata["reports"][report_id]
+                        save_metadata(st.session_state.metadata)
+                        st.success("✅ Отчет удален")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Ошибка при удалении: {str(e)}")
+
+
 def render_sidebar():
-    """Отображение боковой панели"""
+    """Боковая панель"""
     with st.sidebar:
-        # Логотип и версия
-        st.markdown("""
-        <div style='text-align: center; padding: 1rem 0;'>
-            <h3 style='margin: 0;'>🧬 FastQCLI</h3>
-            <p style='margin: 0.5rem 0 0 0; font-size: 0.9rem; opacity: 0.8;'>v1.0.0 | Sequali Engine</p>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown("### 🧬 FastQCLI Advanced")
+        st.caption("v3.0.0 | Extended Features")
         
         st.divider()
         
         # Статус системы
-        st.markdown("### 🔍 Статус системы")
+        st.markdown("#### 📊 Статус системы")
         
         col1, col2 = st.columns(2)
-        
-        # Проверка Python
         with col1:
-            python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+            python_version = f"{sys.version_info.major}.{sys.version_info.minor}"
             st.metric("Python", python_version)
         
-        # Проверка Sequali
         with col2:
             if FASTQCLI_AVAILABLE and has_command('sequali'):
-                st.metric("Sequali", "✅ Установлен")
-                st.session_state.sequali_installed = True
+                st.metric("Sequali", "✅")
             else:
-                st.metric("Sequali", "❌ Не установлен")
-                st.session_state.sequali_installed = False
+                st.metric("Sequali", "❌")
+        
+        # Статистика
+        st.divider()
+        st.markdown("#### 📈 Статистика")
+        
+        files_count = len(st.session_state.metadata.get("files", {}))
+        reports_count = len(st.session_state.metadata.get("reports", {}))
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("Файлов", files_count)
+        with col2:
+            st.metric("Отчетов", reports_count)
+        
+        # Кнопка перехода к реестру отчетов
+        st.divider()
+        if st.button("📊 Открыть реестр всех отчетов", type="primary", use_container_width=True):
+            # Переходим на страницу без параметров для показа списка
+            st.query_params.clear()
+            st.switch_page("pages/2_Report_Viewer.py")
+        
+        # Управление данными
+        st.divider()
+        st.markdown("#### 🗂️ Управление данными")
+        
+        if st.button("🗑️ Очистить все данные", use_container_width=True):
+            if st.checkbox("Подтвердить удаление"):
+                try:
+                    # Очищаем директории
+                    if UPLOADED_FILES_DIR.exists():
+                        shutil.rmtree(UPLOADED_FILES_DIR)
+                    if REPORTS_DIR.exists():
+                        shutil.rmtree(REPORTS_DIR)
+                    
+                    # Очищаем метаданные
+                    st.session_state.metadata = {"files": {}, "reports": {}}
+                    save_metadata(st.session_state.metadata)
+                    
+                    # Пересоздаем директории
+                    init_directories()
+                    
+                    st.success("✅ Все данные удалены")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Ошибка: {str(e)}")
+        
+        # Экспорт/импорт метаданных
+        st.divider()
+        st.markdown("#### 💾 Экспорт/Импорт")
+        
+        # Экспорт
+        metadata_json = json.dumps(st.session_state.metadata, indent=2, default=str)
+        st.download_button(
+            label="📤 Экспорт метаданных",
+            data=metadata_json,
+            file_name=f"metadata_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+            mime="application/json",
+            use_container_width=True
+        )
         
         st.divider()
         
-        # Информация
-        st.markdown("### ℹ️ О программе")
         st.markdown("""
-        **FastQCLI** - это современный инструмент для анализа качества FASTQ файлов, 
-        использующий высокопроизводительный движок Sequali.
+        #### ℹ️ О программе
         
-        **Возможности:**
-        - ⚡ Скорость 300+ MB/sec
-        - 🔧 Автоустановка зависимостей
-        - 📊 Детальные метрики качества
-        - 📈 Интерактивная визуализация
-        - 📄 HTML/JSON отчеты
+        **Advanced версия** FastQCLI:
+        - 📂 История файлов
+        - 📊 Реестр отчетов
+        - 🔄 Повторный анализ
+        - 🖼️ Полноэкранный просмотр
+        - 💾 Постоянное хранение
         
-        **Метрики:**
-        - Q20/Q30 проценты
-        - GC содержание
-        - Длина ридов
-        - N-содержание
-        - Статистика дупликатов
+        **Новые возможности:**
+        - ✅ Система вкладок
+        - ✅ Управление данными
+        - ✅ Поиск и фильтрация
+        - ✅ Экспорт/импорт
+        - ✅ Статистика использования
         """)
-        
-        st.divider()
-        
-        # История анализов
-        if st.session_state.analysis_history:
-            st.markdown("### 📊 История анализов")
-            for i, record in enumerate(reversed(st.session_state.analysis_history[-5:]), 1):
-                status_icon = "✅" if record['status'] == 'success' else "❌"
-                st.text(f"{status_icon} {record['filename'][:20]}...")
-                st.caption(f"  {record['time']}")
 
 
 def check_sequali_installation():
@@ -241,32 +703,14 @@ def check_sequali_installation():
     if not st.session_state.sequali_installed:
         with st.spinner("🔍 Проверяю установку Sequali..."):
             if not has_command('sequali'):
-                st.info("📦 Sequali не найден. Начинаю автоматическую установку...")
-                
-                # Прогресс установки
-                progress = st.progress(0)
-                status = st.empty()
-                
-                status.text("Устанавливаю Sequali через pip...")
-                progress.progress(30)
-                
+                st.info("📦 Устанавливаю Sequali...")
                 if check_and_install_sequali():
-                    progress.progress(100)
-                    status.text("✅ Sequali успешно установлен!")
                     st.session_state.sequali_installed = True
+                    st.success("✅ Sequali установлен!")
                     time.sleep(1)
                     st.rerun()
                 else:
-                    progress.progress(100)
-                    status.text("")
-                    st.error("""
-                    ❌ Не удалось установить Sequali автоматически.
-                    
-                    Попробуйте установить вручную:
-                    ```bash
-                    pip install sequali
-                    ```
-                    """)
+                    st.error("❌ Не удалось установить Sequali автоматически")
                     return False
             else:
                 st.session_state.sequali_installed = True
@@ -274,642 +718,12 @@ def check_sequali_installation():
     return True
 
 
-def parse_sequali_json(json_path: Path) -> Dict[str, Any]:
-    """Парсинг JSON результатов от Sequali"""
-    try:
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-        
-        summary = data.get('summary', {})
-        
-        # Преобразуем в формат для отображения
-        metrics = {
-            'total_reads': summary.get('read_count', 0),
-            'total_bases': summary.get('base_count', 0),
-            'mean_length': summary.get('mean_read_length', 0),
-            'min_length': summary.get('min_read_length', 0),
-            'max_length': summary.get('max_read_length', 0),
-            'gc_content': summary.get('gc_content', 0) * 100,
-            'q20_rate': summary.get('q20_rate', 0) * 100,
-            'q30_rate': summary.get('q30_rate', 0) * 100,
-            'n_rate': summary.get('n_rate', 0) * 100 if 'n_rate' in summary else 0
-        }
-        
-        # Определение статуса качества
-        if metrics['q30_rate'] >= 80:
-            quality_status = 'PASS'
-        elif metrics['q30_rate'] >= 70:
-            quality_status = 'WARNING'
-        else:
-            quality_status = 'FAIL'
-        
-        return {
-            'metrics': metrics,
-            'quality_status': quality_status,
-            'raw_data': data
-        }
-    except Exception as e:
-        st.error(f"Ошибка парсинга JSON: {e}")
-        return None
-
-
-def run_sequali_analysis(file_path: str, output_dir: str, options: Dict[str, Any]):
-    """Запуск анализа через Sequali"""
-    
-    # Индикаторы прогресса
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    metrics_container = st.container()
-    
-    try:
-        # Начало анализа
-        status_text.text("🚀 Запускаю анализ Sequali...")
-        progress_bar.progress(20)
-        
-        start_time = time.time()
-        file_size_mb = Path(file_path).stat().st_size / (1024 * 1024)
-        
-        # Показываем метрики в реальном времени
-        col1, col2, col3 = metrics_container.columns(3)
-        with col1:
-            size_metric = st.metric("Размер файла", f"{file_size_mb:.1f} MB")
-        with col2:
-            speed_metric = st.metric("Скорость", "Расчет...")
-        with col3:
-            time_metric = st.metric("Время", "0 сек")
-        
-        progress_bar.progress(40)
-        
-        # Запуск анализа с отладкой
-        st.write(f"DEBUG: Analyzing file: {file_path}")
-        st.write(f"DEBUG: Output directory: {output_dir}")
-        
-        success = analyze_with_sequali(
-            file_path,
-            output_dir=output_dir,
-            save_json=options.get('save_json', True),
-            save_html=options.get('save_html', True)
-        )
-        
-        elapsed_time = time.time() - start_time
-        speed_mbps = file_size_mb / elapsed_time if elapsed_time > 0 else 0
-        
-        # Обновляем метрики
-        with col2:
-            st.metric("Скорость", f"{speed_mbps:.1f} MB/sec")
-        with col3:
-            st.metric("Время", f"{elapsed_time:.1f} сек")
-        
-        progress_bar.progress(80)
-        
-        if success:
-            status_text.text("📊 Обрабатываю результаты...")
-            
-            # Проверим какие файлы были созданы
-            st.write("DEBUG: Files in output dir after analysis:")
-            output_files = list(Path(output_dir).glob("*"))
-            for file in output_files:
-                st.write(f"  - {file.name}")
-            
-            # Пробуем разные варианты имён файлов
-            json_path = None
-            possible_names = [
-                f"{Path(file_path).name}.json",  # С полным именем включая расширение
-                f"{Path(file_path).stem}.json",   # Только базовое имя
-            ]
-            
-            for name in possible_names:
-                test_path = Path(output_dir) / name
-                st.write(f"DEBUG: Checking for {test_path}")
-                if test_path.exists():
-                    json_path = test_path
-                    st.write(f"DEBUG: Found JSON at {json_path}")
-                    break
-            
-            # Если не нашли по именам, ищем любой JSON файл
-            if json_path is None:
-                json_files = list(Path(output_dir).glob("*.json"))
-                if json_files:
-                    json_path = json_files[0]
-                    st.write(f"DEBUG: Using first JSON file found: {json_path.name}")
-            
-            if json_path and json_path.exists():
-                results = parse_sequali_json(json_path)
-                
-                progress_bar.progress(100)
-                status_text.text("✅ Анализ завершен успешно!")
-                
-                # Добавляем в историю
-                st.session_state.analysis_history.append({
-                    'filename': Path(file_path).name,
-                    'time': datetime.now().strftime("%H:%M:%S"),
-                    'status': 'success',
-                    'speed': speed_mbps,
-                    'elapsed': elapsed_time
-                })
-                
-                return results
-            else:
-                st.error("JSON файл с результатами не найден")
-                return None
-        else:
-            progress_bar.progress(100)
-            status_text.text("")
-            st.error("❌ Ошибка при анализе файла")
-            
-            st.session_state.analysis_history.append({
-                'filename': Path(file_path).name,
-                'time': datetime.now().strftime("%H:%M:%S"),
-                'status': 'error',
-                'speed': 0,
-                'elapsed': elapsed_time
-            })
-            
-            return None
-            
-    except Exception as e:
-        progress_bar.progress(100)
-        status_text.text("")
-        st.error(f"❌ Критическая ошибка: {str(e)}")
-        return None
-
-
-def display_results(results: Dict[str, Any], filename: str, output_dir: str):
-    """Отображение результатов анализа"""
-    
-    # Статус качества
-    st.markdown("### 📊 Результаты анализа")
-    
-    quality_status = results.get('quality_status', 'UNKNOWN')
-    if quality_status == 'PASS':
-        st.markdown('<div class="quality-pass">✅ Качество данных: ОТЛИЧНОЕ</div>', unsafe_allow_html=True)
-    elif quality_status == 'WARNING':
-        st.markdown('<div class="quality-warning">⚠️ Качество данных: ТРЕБУЕТ ВНИМАНИЯ</div>', unsafe_allow_html=True)
-    else:
-        st.markdown('<div class="quality-fail">❌ Качество данных: НИЗКОЕ</div>', unsafe_allow_html=True)
-    
-    # Основные метрики
-    st.markdown("#### 📈 Ключевые метрики")
-    
-    metrics = results.get('metrics', {})
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric(
-            "Всего ридов",
-            f"{metrics.get('total_reads', 0):,}"
-        )
-        st.metric(
-            "Всего оснований",
-            f"{metrics.get('total_bases', 0):,}"
-        )
-    
-    with col2:
-        st.metric(
-            "Средняя длина",
-            f"{metrics.get('mean_length', 0):.1f} bp"
-        )
-        st.metric(
-            "Диапазон длин",
-            f"{metrics.get('min_length', 0)}-{metrics.get('max_length', 0)}"
-        )
-    
-    with col3:
-        q30 = metrics.get('q30_rate', 0)
-        st.metric(
-            "Q30",
-            f"{q30:.1f}%",
-            delta=f"{q30-80:.1f}%" if q30 != 0 else None
-        )
-        q20 = metrics.get('q20_rate', 0)
-        st.metric(
-            "Q20",
-            f"{q20:.1f}%",
-            delta=f"{q20-90:.1f}%" if q20 != 0 else None
-        )
-    
-    with col4:
-        gc = metrics.get('gc_content', 0)
-        st.metric(
-            "GC содержание",
-            f"{gc:.1f}%",
-            delta=f"{gc-50:.1f}%" if gc != 0 else None
-        )
-        n_rate = metrics.get('n_rate', 0)
-        st.metric(
-            "N содержание",
-            f"{n_rate:.3f}%",
-            delta=f"{n_rate:.3f}%" if n_rate > 1 else None
-        )
-    
-    # Визуализация
-    if results.get('raw_data'):
-        st.markdown("#### 📊 Визуализация данных")
-        
-        tab1, tab2, tab3 = st.tabs(["Качество по позициям", "Распределение длин", "GC содержание"])
-        
-        with tab1:
-            # Здесь можно добавить графики из raw_data
-            st.info("Графики качества по позициям будут добавлены в следующей версии")
-        
-        with tab2:
-            st.info("График распределения длин будет добавлен в следующей версии")
-        
-        with tab3:
-            # Простой пример графика GC
-            fig = go.Figure(go.Indicator(
-                mode = "gauge+number",
-                value = gc,
-                domain = {'x': [0, 1], 'y': [0, 1]},
-                title = {'text': "GC Content (%)"},
-                gauge = {
-                    'axis': {'range': [None, 100]},
-                    'bar': {'color': "darkblue"},
-                    'steps': [
-                        {'range': [0, 40], 'color': "lightgray"},
-                        {'range': [40, 60], 'color': "gray"},
-                        {'range': [60, 100], 'color': "lightgray"}
-                    ],
-                    'threshold': {
-                        'line': {'color': "red", 'width': 4},
-                        'thickness': 0.75,
-                        'value': 50
-                    }
-                }
-            ))
-            fig.update_layout(height=300)
-            st.plotly_chart(fig, use_container_width=True)
-    
-    # Кнопки скачивания
-    st.markdown("#### 📥 Скачать отчеты")
-    
-    col1, col2 = st.columns(2)
-    
-    output_path = Path(output_dir)
-    base_name = Path(filename).stem
-    full_name = Path(filename).name
-    
-    with col1:
-        # Пробуем разные варианты имён файлов
-        html_path = None
-        possible_html = [
-            output_path / f"{full_name}.html",
-            output_path / f"{base_name}.html"
-        ]
-        
-        for path in possible_html:
-            if path.exists():
-                html_path = path
-                break
-        
-        # Если не нашли, ищем любой HTML
-        if not html_path:
-            html_files = list(output_path.glob("*.html"))
-            if html_files:
-                html_path = html_files[0]
-        
-        if html_path and html_path.exists():
-            with open(html_path, 'rb') as f:
-                st.download_button(
-                    label="📄 Скачать HTML отчет",
-                    data=f.read(),
-                    file_name=f"{base_name}_report.html",
-                    mime="text/html"
-                )
-    
-    with col2:
-        # Пробуем разные варианты имён файлов
-        json_path = None
-        possible_json = [
-            output_path / f"{full_name}.json",
-            output_path / f"{base_name}.json"
-        ]
-        
-        for path in possible_json:
-            if path.exists():
-                json_path = path
-                break
-        
-        # Если не нашли, ищем любой JSON
-        if not json_path:
-            json_files = list(output_path.glob("*.json"))
-            if json_files:
-                json_path = json_files[0]
-        
-        if json_path and json_path.exists():
-            with open(json_path, 'rb') as f:
-                st.download_button(
-                    label="📊 Скачать JSON данные",
-                    data=f.read(),
-                    file_name=f"{base_name}_data.json",
-                    mime="application/json"
-                )
-
-
-def render_analysis_page():
-    """Страница анализа"""
-    st.title("📊 Анализ качества FASTQ")
-    
-    # Проверка установки Sequali
-    if not check_sequali_installation():
-        st.error("Sequali не установлен. Установите его для продолжения работы.")
-        return
-    
-    # Загрузка файла
-    st.markdown("### 📁 Загрузка файла")
-    
-    uploaded_file = st.file_uploader(
-        "Выберите FASTQ файл для анализа",
-        type=['fastq', 'fq', 'gz'],
-        help="Поддерживаются форматы: .fastq, .fq, .fastq.gz, .fq.gz"
-    )
-    
-    # Опции анализа
-    with st.expander("⚙️ Параметры анализа", expanded=False):
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            save_html = st.checkbox("Генерировать HTML отчет", value=True)
-            save_json = st.checkbox("Сохранить JSON данные", value=True)
-        
-        with col2:
-            st.info("""
-            **Sequali автоматически рассчитывает:**
-            - Q20/Q30 проценты
-            - GC содержание
-            - Статистику длин
-            - Распределение качества
-            - И многое другое...
-            """)
-    
-    # Анализ файла
-    if uploaded_file is not None:
-        st.markdown("### 📋 Информация о файле")
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Имя файла", uploaded_file.name[:30] + "..." if len(uploaded_file.name) > 30 else uploaded_file.name)
-        with col2:
-            file_size_mb = uploaded_file.size / (1024 * 1024)
-            st.metric("Размер", f"{file_size_mb:.2f} MB")
-        with col3:
-            # Оценка времени (300 MB/sec)
-            estimated_time = file_size_mb / 300
-            st.metric("Оценка времени", f"~{estimated_time:.1f} сек")
-        
-        if st.button("🚀 Начать анализ", type="primary", use_container_width=True):
-            
-            # Создание временных директорий
-            with tempfile.TemporaryDirectory() as temp_dir:
-                # Сохранение файла
-                file_path = os.path.join(temp_dir, uploaded_file.name)
-                with open(file_path, 'wb') as f:
-                    f.write(uploaded_file.getbuffer())
-                
-                # Директория для результатов
-                output_dir = os.path.join(temp_dir, 'results')
-                os.makedirs(output_dir, exist_ok=True)
-                
-                # Запуск анализа
-                results = run_sequali_analysis(
-                    file_path,
-                    output_dir,
-                    {
-                        'save_html': save_html,
-                        'save_json': save_json
-                    }
-                )
-                
-                # Отображение результатов
-                if results:
-                    st.session_state.current_results = results
-                    display_results(results, uploaded_file.name, output_dir)
-
-
-def render_batch_page():
-    """Страница пакетной обработки"""
-    st.title("📦 Пакетная обработка")
-    
-    st.info("""
-    Пакетная обработка позволяет анализировать несколько FASTQ файлов одновременно.
-    
-    **Как использовать:**
-    1. Выберите несколько файлов
-    2. Настройте параметры
-    3. Запустите анализ
-    4. Получите сводный отчет
-    """)
-    
-    # Множественная загрузка
-    uploaded_files = st.file_uploader(
-        "Выберите FASTQ файлы",
-        type=['fastq', 'fq', 'gz'],
-        accept_multiple_files=True,
-        help="Можно выбрать несколько файлов"
-    )
-    
-    if uploaded_files:
-        st.markdown(f"### Выбрано файлов: {len(uploaded_files)}")
-        
-        # Таблица файлов
-        file_data = []
-        total_size = 0
-        for f in uploaded_files:
-            size_mb = f.size / (1024 * 1024)
-            total_size += size_mb
-            file_data.append({
-                'Файл': f.name[:40] + "..." if len(f.name) > 40 else f.name,
-                'Размер (MB)': f"{size_mb:.2f}"
-            })
-        
-        df = pd.DataFrame(file_data)
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        
-        # Оценка времени
-        estimated_time = total_size / 300  # 300 MB/sec
-        st.info(f"""
-        **Общий размер:** {total_size:.2f} MB  
-        **Оценка времени:** ~{estimated_time:.1f} сек ({estimated_time/60:.1f} мин)
-        """)
-        
-        if st.button("🚀 Начать пакетный анализ", type="primary", use_container_width=True):
-            st.warning("Пакетная обработка будет добавлена в следующей версии")
-
-
-def render_settings_page():
-    """Страница настроек"""
-    st.title("⚙️ Настройки")
-    
-    st.markdown("### 🔧 Настройки Sequali")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### Установка")
-        if st.button("Переустановить Sequali"):
-            with st.spinner("Переустановка Sequali..."):
-                result = subprocess.run(
-                    [sys.executable, '-m', 'pip', 'install', '--upgrade', 'sequali'],
-                    capture_output=True,
-                    text=True
-                )
-                if result.returncode == 0:
-                    st.success("✅ Sequali успешно переустановлен")
-                else:
-                    st.error(f"Ошибка: {result.stderr}")
-    
-    with col2:
-        st.markdown("#### Версия")
-        if has_command('sequali'):
-            result = subprocess.run(['sequali', '--version'], capture_output=True, text=True)
-            version = result.stdout.strip() if result.stdout else "Неизвестно"
-            st.info(f"Sequali версия: {version}")
-        else:
-            st.warning("Sequali не установлен")
-    
-    st.markdown("### 📊 Настройки отчетов")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("#### Форматы по умолчанию")
-        html_default = st.checkbox("HTML отчет", value=True, key="settings_html")
-        json_default = st.checkbox("JSON данные", value=True, key="settings_json")
-    
-    with col2:
-        st.markdown("#### Дополнительно")
-        auto_open = st.checkbox("Автоматически открывать HTML", value=False)
-        keep_temp = st.checkbox("Сохранять временные файлы", value=False)
-    
-    if st.button("💾 Сохранить настройки"):
-        st.success("✅ Настройки сохранены")
-
-
-def render_documentation_page():
-    """Страница документации"""
-    st.title("📚 Документация")
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["Быстрый старт", "О Sequali", "FAQ", "API"])
-    
-    with tab1:
-        st.markdown("""
-        ### 🚀 Быстрый старт
-        
-        1. **Загрузка файла**
-           - Нажмите на область загрузки или перетащите файл
-           - Поддерживаются: .fastq, .fq, .fastq.gz, .fq.gz
-        
-        2. **Запуск анализа**
-           - Нажмите кнопку "Начать анализ"
-           - Дождитесь завершения (скорость ~300 MB/sec)
-        
-        3. **Получение результатов**
-           - Изучите метрики качества
-           - Скачайте HTML или JSON отчет
-        
-        ### 📊 Интерпретация результатов
-        
-        **Q-scores (Quality scores):**
-        - **Q30 > 80%** - Отличное качество
-        - **Q30 70-80%** - Хорошее качество
-        - **Q30 < 70%** - Требует внимания
-        
-        **GC содержание:**
-        - **40-60%** - Нормальный диапазон для большинства организмов
-        - **< 40% или > 60%** - Может указывать на контаминацию или особенности образца
-        
-        **N содержание:**
-        - **< 1%** - Отлично
-        - **1-5%** - Приемлемо
-        - **> 5%** - Может повлиять на дальнейший анализ
-        """)
-    
-    with tab2:
-        st.markdown("""
-        ### 🚀 О Sequali
-        
-        **Sequali** - это современная высокопроизводительная альтернатива FastQC, написанная на Rust.
-        
-        **Преимущества:**
-        - ⚡ **Скорость**: 300+ MB/sec (в 3-4 раза быстрее FastQC)
-        - 🔧 **Эффективность**: Низкое потребление памяти
-        - 📊 **Функциональность**: Все метрики FastQC и больше
-        - 🌐 **Совместимость**: Работает на всех платформах
-        
-        **Автор:** Ruben Vorderman  
-        **Лицензия:** MIT  
-        **GitHub:** https://github.com/rhpvorderman/sequali
-        
-        ### Технические детали
-        
-        Sequali использует:
-        - Параллельную обработку
-        - SIMD инструкции для ускорения
-        - Эффективные алгоритмы сжатия
-        - Минимальные зависимости
-        """)
-    
-    with tab3:
-        st.markdown("""
-        ### ❓ Часто задаваемые вопросы
-        
-        **Q: Какой максимальный размер файла?**  
-        A: Ограничений нет. Sequali эффективно обрабатывает файлы любого размера.
-        
-        **Q: Поддерживаются ли сжатые файлы?**  
-        A: Да, .fastq.gz и .fq.gz обрабатываются автоматически.
-        
-        **Q: Можно ли использовать через командную строку?**  
-        A: Да, используйте fastqcli.py для CLI интерфейса.
-        
-        **Q: Требуется ли интернет для работы?**  
-        A: Только при первой установке Sequali. Далее работает оффлайн.
-        
-        **Q: Как сравнить несколько файлов?**  
-        A: Используйте вкладку "Пакетная обработка" (в разработке).
-        """)
-    
-    with tab4:
-        st.markdown("""
-        ### 🔧 Python API
-        
-        ```python
-        from fastqcli import analyze_with_sequali
-        
-        # Анализ одного файла
-        success = analyze_with_sequali(
-            'sample.fastq',
-            output_dir='results/',
-            save_json=True,
-            save_html=True
-        )
-        
-        # Проверка установки Sequali
-        from fastqcli import check_and_install_sequali
-        if check_and_install_sequali():
-            print("Sequali готов к работе")
-        ```
-        
-        ### Структура JSON результатов
-        
-        ```json
-        {
-            "summary": {
-                "read_count": 1000000,
-                "base_count": 150000000,
-                "mean_read_length": 150.0,
-                "gc_content": 0.45,
-                "q20_rate": 0.95,
-                "q30_rate": 0.85
-            }
-        }
-        ```
-        """)
-
-
 def main():
     """Основная функция приложения"""
+    
+    # Инициализация
+    init_directories()
+    init_session_state()
     
     # Проверка наличия fastqcli.py
     if not FASTQCLI_AVAILABLE:
@@ -928,31 +742,34 @@ def main():
     # Боковая панель
     render_sidebar()
     
-    # Основные вкладки
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📊 Анализ файла",
-        "📦 Пакетная обработка",
-        "⚙️ Настройки",
-        "📚 Документация"
+    # Проверка установки Sequali
+    if not check_sequali_installation():
+        st.error("Sequali не установлен. Установите его для продолжения работы.")
+        st.stop()
+    
+    # Убираем проверку полноэкранного режима - теперь это на отдельной странице
+    
+    # Основной интерфейс с вкладками
+    tab1, tab2, tab3 = st.tabs([
+        "🆕 Новый анализ",
+        "📂 История файлов",
+        "📊 Реестр отчетов"
     ])
     
     with tab1:
-        render_analysis_page()
+        render_new_analysis_tab()
     
     with tab2:
-        render_batch_page()
+        render_files_history_tab()
     
     with tab3:
-        render_settings_page()
-    
-    with tab4:
-        render_documentation_page()
+        render_reports_registry_tab()
     
     # Футер
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: #666; padding: 1rem;'>
-        <p>FastQCLI v1.0.0 | Powered by Sequali | © 2025 TaskContract2025</p>
+        <p>FastQCLI Advanced v3.0.0 | Extended Features | © 2025 TaskContract2025</p>
     </div>
     """, unsafe_allow_html=True)
 
