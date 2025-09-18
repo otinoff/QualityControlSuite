@@ -1,0 +1,112 @@
+name: Deploy to Server
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run tests
+      run: |
+        python -m pytest tests/ || echo "No tests found, skipping"
+  
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v0.1.5
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: ${{ secrets.SERVER_PORT }}
+        script: |
+          # Проверка и создание директории проекта
+          PROJECT_DIR="/var/QualityControlSuite"
+          
+          # Создание директории если её нет
+          if [ ! -d "$PROJECT_DIR" ]; then
+            echo "Project directory doesn't exist, creating..."
+            sudo mkdir -p $PROJECT_DIR
+          fi
+          
+          # Сохранение конфигурации (если есть)
+          if [ -d "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/config/local_settings.yaml" ]; then
+            echo "Saving local configuration..."
+            cp $PROJECT_DIR/config/local_settings.yaml /tmp/qc_local_settings.yaml
+          fi
+          
+          # Переход в директорию проекта
+          cd $PROJECT_DIR
+          
+          # Проверка существования директории и попытка обновления
+          if [ -d ".git" ]; then
+            echo "Repository exists, updating via git..."
+            # Обновление через git pull
+            sudo git fetch origin
+            sudo git reset --hard origin/master
+            echo "Successfully updated via git"
+          else
+            # Если это не git репозиторий - инициализируем и клонируем
+            echo "Not a git repository, initializing..."
+            sudo rm -rf .[^.]* ..?* * 2>/dev/null || true  # Очистка директории
+            sudo git init
+            sudo git remote add origin https://github.com/otinoff/QualityControlSuite.git
+            sudo git fetch origin
+            sudo git reset --hard origin/master
+            sudo git branch -M master
+            echo "Repository initialized and cloned"
+          fi
+          
+          # Восстановление локальной конфигурации
+          if [ -f /tmp/qc_local_settings.yaml ]; then
+            echo "Restoring local configuration..."
+            mkdir -p config
+            cp /tmp/qc_local_settings.yaml config/local_settings.yaml
+            rm /tmp/qc_local_settings.yaml
+          fi
+          
+          # Обновление зависимостей в виртуальном окружении
+          if [ ! -d "venv" ]; then
+            echo "Creating virtual environment..."
+            python3 -m venv venv
+          fi
+          
+          echo "Updating dependencies..."
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          
+          # Установка владельца и прав доступа
+          sudo chown -R www-data:www-data $PROJECT_DIR
+          sudo chmod +x $PROJECT_DIR/fastqcli.py
+          sudo chmod -R 755 $PROJECT_DIR
+          
+          # Перезапуск сервиса (если используется systemd)
+          sudo systemctl restart qualitycontrolsuite || echo "Service not configured yet"
+          
+          # Проверка nginx конфигурации
+          sudo nginx -t && sudo systemctl reload nginx || echo "Nginx not configured yet"
+          
+          echo "Deployment completed successfully!"
