@@ -4,9 +4,9 @@
       "filename": "Undetermined_S0_L001_R1_001.fastq",
       "path": "data\\uploaded_files\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq",
       "size_mb": 527.9781560897827,
-      "upload_time": "2025-09-18 08:47:09.191999",
+      "upload_time": "2025-09-18T08:47:09.191999",
       "hash": "3d1e0e74efea2b9e073eafea7da377c7",
-      "analysis_count": 1
+      "analysis_count": 3
     }
   },
   "reports": {
@@ -14,8 +14,24 @@
       "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
       "filename": "Undetermined_S0_L001_R1_001.fastq",
       "report_path": "data\\reports\\b0cfa575-d3fb-449a-87dd-bac5e06aecd9\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq.html",
-      "creation_time": "2025-09-18 08:47:12.400138",
+      "creation_time": "2025-09-18T08:47:12.400138",
       "elapsed_time": 3.2001395225524902,
+      "status": "SUCCESS"
+    },
+    "0de5cf0d-07c7-43f4-acfb-c61ecadd723b": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "data\\reports\\0de5cf0d-07c7-43f4-acfb-c61ecadd723b\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq.html",
+      "creation_time": "2025-09-18T22:38:06.395502",
+      "elapsed_time": 3.1439363956451416,
+      "status": "SUCCESS"
+    },
+    "b0629623-8417-481d-8efb-3db5a707f77e": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "data\\reports\\b0629623-8417-481d-8efb-3db5a707f77e\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq.html",
+      "creation_time": "2025-09-18T22:41:17.829243",
+      "elapsed_time": 3.0329105854034424,
       "status": "SUCCESS"
     }
   }

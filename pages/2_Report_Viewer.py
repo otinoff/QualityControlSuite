@@ -95,7 +95,23 @@ def load_metadata():
     if metadata_file.exists():
         try:
             with open(metadata_file, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Конвертируем строковые даты обратно в datetime объекты
+                for file_id, file_info in data.get("files", {}).items():
+                    if "upload_time" in file_info and isinstance(file_info["upload_time"], str):
+                        try:
+                            file_info["upload_time"] = datetime.fromisoformat(file_info["upload_time"])
+                        except:
+                            file_info["upload_time"] = datetime.now()
+                
+                for report_id, report_info in data.get("reports", {}).items():
+                    if "creation_time" in report_info and isinstance(report_info["creation_time"], str):
+                        try:
+                            report_info["creation_time"] = datetime.fromisoformat(report_info["creation_time"])
+                        except:
+                            report_info["creation_time"] = datetime.now()
+                
+                return data
         except:
             return {"files": {}, "reports": {}}
     return {"files": {}, "reports": {}}
@@ -138,6 +154,7 @@ def display_report_fullscreen(report_path: str, report_info: dict = None):
     with col3:
         # Кнопка возврата
         if st.button("🏠 На главную", type="primary", use_container_width=True):
+            st.query_params.clear()
             st.switch_page("streamlit_fastqcli.py")
     
     st.markdown("---")
@@ -147,6 +164,41 @@ def display_report_fullscreen(report_path: str, report_info: dict = None):
         try:
             with open(report_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
+            
+            # Добавляем JavaScript для обработки внутренних ссылок
+            html_content = html_content.replace(
+                '<head>',
+                '''<head>
+                <base target="_self">
+                <script>
+                // Предотвращаем конфликты с Streamlit навигацией
+                document.addEventListener('DOMContentLoaded', function() {
+                    // Обрабатываем все внутренние ссылки
+                    var links = document.getElementsByTagName('a');
+                    for (var i = 0; i < links.length; i++) {
+                        var link = links[i];
+                        var href = link.getAttribute('href');
+                        
+                        // Если это внутренняя ссылка (якорь)
+                        if (href && href.startsWith('#')) {
+                            link.onclick = function(e) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                var target = document.querySelector(this.getAttribute('href'));
+                                if (target) {
+                                    target.scrollIntoView({behavior: 'smooth'});
+                                }
+                                return false;
+                            };
+                        }
+                        // Если это внешняя ссылка
+                        else if (href && (href.startsWith('http') || href.startsWith('https'))) {
+                            link.setAttribute('target', '_blank');
+                        }
+                    }
+                });
+                </script>'''
+            )
             
             # Встраиваем HTML отчет с максимальной высотой
             components.html(
@@ -195,6 +247,7 @@ def main():
         
         # Кнопка возврата на главную
         if st.button("🏠 Вернуться на главную", type="secondary"):
+            st.query_params.clear()
             st.switch_page("streamlit_fastqcli.py")
         
         st.markdown("---")
@@ -204,9 +257,22 @@ def main():
         
         if reports:
             # Сортируем отчеты по времени создания (новые сверху)
+            def get_report_time(item):
+                creation_time = item[1].get("creation_time", None)
+                if creation_time is None:
+                    return datetime.min
+                if isinstance(creation_time, str):
+                    try:
+                        return datetime.fromisoformat(creation_time)
+                    except:
+                        return datetime.min
+                if isinstance(creation_time, datetime):
+                    return creation_time
+                return datetime.min
+            
             sorted_reports = sorted(
                 reports.items(),
-                key=lambda x: x[1].get("creation_time", datetime.min.isoformat() if isinstance(datetime.min, datetime) else str(datetime.min)),
+                key=get_report_time,
                 reverse=True
             )
             

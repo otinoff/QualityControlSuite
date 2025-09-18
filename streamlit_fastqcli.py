@@ -142,7 +142,23 @@ def load_metadata() -> Dict:
     if METADATA_FILE.exists():
         try:
             with open(METADATA_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                data = json.load(f)
+                # Конвертируем строковые даты обратно в datetime объекты
+                for file_id, file_info in data.get("files", {}).items():
+                    if "upload_time" in file_info and isinstance(file_info["upload_time"], str):
+                        try:
+                            file_info["upload_time"] = datetime.fromisoformat(file_info["upload_time"])
+                        except:
+                            file_info["upload_time"] = datetime.now()
+                
+                for report_id, report_info in data.get("reports", {}).items():
+                    if "creation_time" in report_info and isinstance(report_info["creation_time"], str):
+                        try:
+                            report_info["creation_time"] = datetime.fromisoformat(report_info["creation_time"])
+                        except:
+                            report_info["creation_time"] = datetime.now()
+                
+                return data
         except:
             return {"files": {}, "reports": {}}
     return {"files": {}, "reports": {}}
@@ -150,8 +166,27 @@ def load_metadata() -> Dict:
 
 def save_metadata(metadata: Dict):
     """Сохранение метаданных в файл"""
+    # Создаем копию для сериализации
+    metadata_copy = {
+        "files": {},
+        "reports": {}
+    }
+    
+    # Конвертируем datetime в ISO строки для сохранения
+    for file_id, file_info in metadata.get("files", {}).items():
+        metadata_copy["files"][file_id] = file_info.copy()
+        if "upload_time" in metadata_copy["files"][file_id]:
+            if isinstance(metadata_copy["files"][file_id]["upload_time"], datetime):
+                metadata_copy["files"][file_id]["upload_time"] = metadata_copy["files"][file_id]["upload_time"].isoformat()
+    
+    for report_id, report_info in metadata.get("reports", {}).items():
+        metadata_copy["reports"][report_id] = report_info.copy()
+        if "creation_time" in metadata_copy["reports"][report_id]:
+            if isinstance(metadata_copy["reports"][report_id]["creation_time"], datetime):
+                metadata_copy["reports"][report_id]["creation_time"] = metadata_copy["reports"][report_id]["creation_time"].isoformat()
+    
     with open(METADATA_FILE, 'w', encoding='utf-8') as f:
-        json.dump(metadata, f, indent=2, default=str)
+        json.dump(metadata_copy, f, indent=2, default=str)
 
 
 def init_session_state():
@@ -441,9 +476,22 @@ def render_files_history_tab():
         return
     
     # Сортируем файлы по времени загрузки (новые сверху)
+    def get_file_time(item):
+        upload_time = item[1].get("upload_time", None)
+        if upload_time is None:
+            return datetime.min
+        if isinstance(upload_time, str):
+            try:
+                return datetime.fromisoformat(upload_time)
+            except:
+                return datetime.min
+        if isinstance(upload_time, datetime):
+            return upload_time
+        return datetime.min
+    
     sorted_files = sorted(
         files.items(),
-        key=lambda x: x[1].get("upload_time", datetime.min),
+        key=get_file_time,
         reverse=True
     )
     
@@ -519,9 +567,22 @@ def render_reports_registry_tab():
         return
     
     # Сортируем отчеты по времени создания (новые сверху)
+    def get_report_time(item):
+        creation_time = item[1].get("creation_time", None)
+        if creation_time is None:
+            return datetime.min
+        if isinstance(creation_time, str):
+            try:
+                return datetime.fromisoformat(creation_time)
+            except:
+                return datetime.min
+        if isinstance(creation_time, datetime):
+            return creation_time
+        return datetime.min
+    
     sorted_reports = sorted(
         reports.items(),
-        key=lambda x: x[1].get("creation_time", datetime.min),
+        key=get_report_time,
         reverse=True
     )
     
