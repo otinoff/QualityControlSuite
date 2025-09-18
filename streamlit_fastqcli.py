@@ -372,12 +372,14 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
                         add_log(f"HTML отчет найден (вариант 3): {html_path.name}", "SUCCESS")
             
             if html_path and html_path.exists():
-                add_log(f"Использую HTML отчет: {html_path}", "SUCCESS")
+                # Преобразуем путь в абсолютный для надежности
+                absolute_html_path = html_path.resolve()
+                add_log(f"Использую HTML отчет: {absolute_html_path}", "SUCCESS")
                 # Обновляем метаданные
                 st.session_state.metadata["reports"][report_id] = {
                     "file_id": file_id,
                     "filename": file_info['filename'],
-                    "report_path": str(html_path),
+                    "report_path": str(absolute_html_path),
                     "creation_time": datetime.now(),
                     "elapsed_time": elapsed_time,
                     "status": "SUCCESS"
@@ -493,21 +495,13 @@ def render_new_analysis_tab():
                     
                     if report_id:
                         st.markdown("---")
-                        st.markdown('<div class="success-message">✅ Анализ завершен успешно!</div>', 
+                        st.markdown('<div class="success-message">✅ Анализ завершен успешно!</div>',
                                    unsafe_allow_html=True)
                         
                         report_info = st.session_state.metadata["reports"][report_id]
                         
-                        # Кнопка просмотра отчета - теперь сразу открываем конкретный отчет
-                        col1, col2 = st.columns(2)
-                        with col1:
-                            if st.button("📊 Открыть отчет", type="primary", use_container_width=True):
-                                st.query_params["report_id"] = report_id
-                                st.switch_page("pages/2_Report_Viewer.py")
-                        with col2:
-                            if st.button("📋 К реестру отчетов", type="secondary", use_container_width=True):
-                                st.query_params.clear()
-                                st.switch_page("pages/2_Report_Viewer.py")
+                        # Вместо кнопок показываем текстовое сообщение
+                        st.info("📋 Анализ завершен успешно! Перейдите в реестр отчетов для просмотра результатов.")
                     else:
                         st.error("❌ Не удалось выполнить анализ")
                 
@@ -568,9 +562,8 @@ def render_files_history_tab():
                         st.success("✅ Повторный анализ завершен!")
                         report_info = st.session_state.metadata["reports"][report_id]
                         
-                        if st.button(f"📊 Открыть отчет", key=f"view_report_{report_id}"):
-                            st.query_params["report_id"] = report_id
-                            st.switch_page("pages/2_Report_Viewer.py")
+                        # Вместо кнопки показываем текстовое сообщение
+                        st.info("📋 Повторный анализ завершен! Перейдите в реестр отчетов для просмотра результатов.")
                     else:
                         st.error("❌ Ошибка при повторном анализе")
             

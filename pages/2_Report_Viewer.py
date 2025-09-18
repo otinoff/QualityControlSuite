@@ -161,9 +161,13 @@ def display_report_fullscreen(report_path: str, report_info: dict = None):
     st.markdown("---")
     
     # Отображение отчета
-    if Path(report_path).exists():
+    # Преобразуем путь в абсолютный для надежности
+    absolute_report_path = Path(report_path).resolve()
+    print(f"[DEBUG] Проверяю файл отчета: {absolute_report_path}")
+    
+    if absolute_report_path.exists():
         try:
-            with open(report_path, 'r', encoding='utf-8') as f:
+            with open(absolute_report_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
             
             # Добавляем JavaScript для обработки внутренних ссылок
@@ -210,8 +214,14 @@ def display_report_fullscreen(report_path: str, report_info: dict = None):
             
         except Exception as e:
             st.error(f"❌ Ошибка при отображении отчета: {str(e)}")
+            # Дополнительная диагностика
+            st.error(f"Детали ошибки: {type(e).__name__}: {str(e)}")
     else:
-        st.error("❌ Файл отчета не найден")
+        st.error(f"❌ Файл отчета не найден: {absolute_report_path}")
+        # Дополнительная диагностика
+        st.error(f"Оригинальный путь: {report_path}")
+        st.error(f"Абсолютный путь: {absolute_report_path}")
+        st.error(f"Текущая директория: {Path.cwd()}")
 
 # Главная логика страницы
 def main():

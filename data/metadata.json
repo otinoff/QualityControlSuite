@@ -6,7 +6,7 @@
       "size_mb": 527.9781560897827,
       "upload_time": "2025-09-18T08:47:09.191999",
       "hash": "3d1e0e74efea2b9e073eafea7da377c7",
-      "analysis_count": 6
+      "analysis_count": 12
     }
   },
   "reports": {
@@ -56,6 +56,54 @@
       "report_path": "data\\reports\\1a581078-f327-4beb-b387-8e357857412e\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq",
       "creation_time": "2025-09-18T23:59:25.103975",
       "elapsed_time": 3.0428946018218994,
+      "status": "SUCCESS"
+    },
+    "915e5e47-075e-484b-acb9-0b26c8466a4f": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "C:\\SnowWhiteAI\\M\\TaskContract2025\\FastQCLI\\data\\reports\\915e5e47-075e-484b-acb9-0b26c8466a4f\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq",
+      "creation_time": "2025-09-19T00:08:33.220144",
+      "elapsed_time": 2.9889721870422363,
+      "status": "SUCCESS"
+    },
+    "deaa371b-d069-4f5e-a800-f539167dbb4a": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "C:\\SnowWhiteAI\\M\\TaskContract2025\\FastQCLI\\data\\reports\\deaa371b-d069-4f5e-a800-f539167dbb4a\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq",
+      "creation_time": "2025-09-19T00:09:08.547295",
+      "elapsed_time": 3.0241103172302246,
+      "status": "SUCCESS"
+    },
+    "f486f2b3-b4fa-48fd-a77f-d80e66fbfc55": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "C:\\SnowWhiteAI\\M\\TaskContract2025\\FastQCLI\\data\\reports\\f486f2b3-b4fa-48fd-a77f-d80e66fbfc55\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq",
+      "creation_time": "2025-09-19T00:12:55.647883",
+      "elapsed_time": 2.9945812225341797,
+      "status": "SUCCESS"
+    },
+    "3cd38da2-b4d8-46ac-8c78-7df5eeb01202": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "C:\\SnowWhiteAI\\M\\TaskContract2025\\FastQCLI\\data\\reports\\3cd38da2-b4d8-46ac-8c78-7df5eeb01202\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq",
+      "creation_time": "2025-09-19T00:17:04.965895",
+      "elapsed_time": 3.0388686656951904,
+      "status": "SUCCESS"
+    },
+    "98ef5cc1-4f07-4a74-b135-65214457a012": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "C:\\SnowWhiteAI\\M\\TaskContract2025\\FastQCLI\\data\\reports\\98ef5cc1-4f07-4a74-b135-65214457a012\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq",
+      "creation_time": "2025-09-19T00:21:26.196386",
+      "elapsed_time": 3.051170825958252,
+      "status": "SUCCESS"
+    },
+    "0d40dce6-309a-48a5-8dac-ee61de58edb4": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "C:\\SnowWhiteAI\\M\\TaskContract2025\\FastQCLI\\data\\reports\\0d40dce6-309a-48a5-8dac-ee61de58edb4\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq",
+      "creation_time": "2025-09-19T00:23:08.846715",
+      "elapsed_time": 3.0065550804138184,
       "status": "SUCCESS"
     }
   }
