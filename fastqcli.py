@@ -165,25 +165,27 @@ def analyze_with_sequali(fastq_file, output_dir=None, save_json=True, save_html=
     base_name = file_path.stem
     full_name = file_path.name
     
+    # Для Sequali нужно указывать имена файлов без расширения в конце
+    # Правильный формат: --html report_name для файла report_name.html
     if save_html:
-        html_file_name = f"{full_name}.html"
+        html_file_name = f"{full_name}"
         cmd.extend(['--html', html_file_name])
-        print(f"[INFO] HTML отчет: {html_file_name}")
+        print(f"[INFO] HTML отчет: {html_file_name}.html")
     else:
         # Создаем временный HTML файл и удаляем его после анализа
-        temp_html = f"{full_name}.temp.html"
+        temp_html = f"{full_name}.temp"
         cmd.extend(['--html', temp_html])
-        print(f"[INFO] Временный HTML отчет: {temp_html}")
+        print(f"[INFO] Временный HTML отчет: {temp_html}.html")
     
     if save_json:
-        json_file_name = f"{full_name}.json"
+        json_file_name = f"{full_name}"
         cmd.extend(['--json', json_file_name])
-        print(f"[INFO] JSON отчет: {json_file_name}")
+        print(f"[INFO] JSON отчет: {json_file_name}.json")
     else:
         # Создаем временный JSON файл и удаляем его после анализа
-        temp_json = f"{full_name}.temp.json"
+        temp_json = f"{full_name}.temp"
         cmd.extend(['--json', temp_json])
-        print(f"[INFO] Временный JSON отчет: {temp_json}")
+        print(f"[INFO] Временный JSON отчет: {temp_json}.json")
     
     # Добавляем файл для анализа
     cmd.append(str(file_path))

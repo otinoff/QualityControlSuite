@@ -305,12 +305,19 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
         
         # Запускаем анализ
         add_log("Запускаю analyze_with_sequali (HTML only)")
-        success = analyze_with_sequali(
-            file_path,
-            output_dir=str(report_dir),
-            save_json=False,
-            save_html=True
-        )
+        add_log(f"Параметры вызова: file_path={file_path}, output_dir={report_dir}")
+        
+        try:
+            success = analyze_with_sequali(
+                file_path,
+                output_dir=str(report_dir),
+                save_json=False,
+                save_html=True
+            )
+            add_log(f"Результат вызова analyze_with_sequali: {success}")
+        except Exception as e:
+            add_log(f"Исключение при вызове analyze_with_sequali: {str(e)}", "ERROR")
+            success = False
         
         elapsed_time = time.time() - start_time
         time_placeholder.metric("⏱️ Время", f"{elapsed_time:.1f} сек")

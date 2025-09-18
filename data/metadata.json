@@ -6,7 +6,7 @@
       "size_mb": 527.9781560897827,
       "upload_time": "2025-09-18T08:47:09.191999",
       "hash": "3d1e0e74efea2b9e073eafea7da377c7",
-      "analysis_count": 3
+      "analysis_count": 4
     }
   },
   "reports": {
@@ -32,6 +32,14 @@
       "report_path": "data\\reports\\b0629623-8417-481d-8efb-3db5a707f77e\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq.html",
       "creation_time": "2025-09-18T22:41:17.829243",
       "elapsed_time": 3.0329105854034424,
+      "status": "SUCCESS"
+    },
+    "f67b3d11-ed15-4250-a376-8e9f81196ab6": {
+      "file_id": "e2937f7a-b50b-40d4-a94e-f921c4d93422",
+      "filename": "Undetermined_S0_L001_R1_001.fastq",
+      "report_path": "data\\reports\\f67b3d11-ed15-4250-a376-8e9f81196ab6\\e2937f7a-b50b-40d4-a94e-f921c4d93422_Undetermined_S0_L001_R1_001.fastq.html",
+      "creation_time": "2025-09-18T22:59:23.854286",
+      "elapsed_time": 3.35275936126709,
       "status": "SUCCESS"
     }
   }
