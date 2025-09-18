@@ -386,6 +386,7 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
         add_log(f"Параметры вызова: file_path={file_path}, output_dir={report_dir}")
         
         try:
+            add_log(f"Вызов analyze_with_sequali с параметрами: file_path={file_path}, output_dir={report_dir}, save_json=False, save_html=True", "DEBUG")
             success = analyze_with_sequali(
                 file_path,
                 output_dir=str(report_dir),
@@ -395,6 +396,7 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
             add_log(f"Результат вызова analyze_with_sequali: {success}")
         except Exception as e:
             add_log(f"Исключение при вызове analyze_with_sequali: {str(e)}", "ERROR")
+            logger.exception("Исключение при вызове analyze_with_sequali")
             success = False
         
         elapsed_time = time.time() - start_time
