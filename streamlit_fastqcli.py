@@ -297,10 +297,10 @@ def save_uploaded_file(uploaded_file, add_upload_log=None) -> Optional[str]:
         if add_upload_log:
             add_upload_log(f"Файл успешно записан: {file_path}", "SUCCESS")
         
-        # Добавляем в метаданные
+        # Добавляем в метаданные - используем posix пути для кроссплатформенности
         st.session_state.metadata["files"][file_id] = {
             "filename": uploaded_file.name,
-            "path": str(file_path),
+            "path": file_path.as_posix(),  # Всегда используем Unix-style пути с '/'
             "size_mb": len(file_content) / (1024 * 1024),
             "upload_time": datetime.now(),
             "hash": file_hash,
@@ -333,17 +333,37 @@ def run_analysis_with_save(file_id: str) -> Optional[str]:
         return None
     
     # Преобразуем путь в Path объект для кроссплатформенности
-    file_path = Path(file_info["path"])
+    # Заменяем обратные слэши на прямые для Unix-совместимости
+    path_str = file_info["path"].replace('\\', '/')
+    file_path = Path(path_str)
     
     # Проверяем существование файла
     if not file_path.exists():
-        # Пробуем абсолютный путь
-        file_path = file_path.resolve()
+        # Если путь относительный, пробуем найти файл относительно текущей директории
+        if not file_path.is_absolute():
+            # Пробуем разные варианты базовых директорий
+            base_dirs = [
+                Path.cwd(),  # Текущая рабочая директория
+                Path(__file__).parent if '__file__' in globals() else Path.cwd(),  # Директория скрипта
+                Path('/var/QualityControlSuite'),  # Директория на хостинге
+                Path('.')  # Относительно текущей директории
+            ]
+            
+            for base_dir in base_dirs:
+                test_path = base_dir / path_str
+                if test_path.exists():
+                    file_path = test_path
+                    break
+        
+        # Если все еще не найден, пробуем абсолютный путь
         if not file_path.exists():
-            st.error(f"Файл не найден: {file_path}")
-            return None
+            file_path = file_path.resolve()
+            if not file_path.exists():
+                st.error(f"Файл не найден: {file_path}")
+                add_log(f"Файл не найден. Пробовал пути: {path_str}, {file_path}", "ERROR")
+                return None
     
-    # Используем абсолютный путь для надежности
+    # Используем абсолютный путь для надежности, с posix-style для кроссплатформенности
     file_path = str(file_path.resolve())
     
     # Создаем уникальный ID для отчета
