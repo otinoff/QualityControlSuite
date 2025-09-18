@@ -130,4 +130,6 @@ test_results_simple/
 *.fastq
 *.html
 !test_data/*.html
-!test_data/*.fastq
+# Exclude large FASTQ files
+test_data/Undetermined_*.fastq
+test_data/*.fastq
