@@ -658,7 +658,7 @@ def render_sidebar():
     """Боковая панель"""
     with st.sidebar:
         st.markdown("### 🧬 FastQCLI Advanced")
-        st.caption("v3.0.0 | Extended Features")
+        st.caption("v3.0.1 | Extended Features")
         
         st.divider()
         
@@ -830,7 +830,7 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style='text-align: center; color: #666; padding: 1rem;'>
-        <p>FastQCLI Advanced v3.0.0 | Extended Features | © 2025 TaskContract2025</p>
+        <p>FastQCLI Advanced v3.0.1 | Extended Features | © 2025 TaskContract2025</p>
     </div>
     """, unsafe_allow_html=True)
 
