@@ -17,7 +17,19 @@ import hashlib
 import shutil
 from typing import Optional, Dict, List
 import uuid
+import logging
 
+# Настройка логирования
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler("fastqcli_debug.log", mode='a', encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)  # Вывод в консоль тоже
+    ]
+)
+
+logger = logging.getLogger(__name__)
 # Настройка страницы
 st.set_page_config(
     page_title="FastQCLI Advanced",
@@ -25,6 +37,21 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Увеличиваем лимиты для загрузки больших файлов
+st.markdown("""
+<style>
+    /* Увеличиваем максимальный размер загружаемого файла */
+    input[type="file"] {
+        max-width: 100%;
+    }
+    
+    /* Увеличиваем лимиты для Streamlit */
+    .stApp {
+        max-width: 100%;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Импорт функций из fastqcli.py
 try:
@@ -205,26 +232,68 @@ def init_session_state():
         st.session_state.analysis_in_progress = False
 
 
-def save_uploaded_file(uploaded_file) -> Optional[str]:
+def save_uploaded_file(uploaded_file, add_upload_log=None) -> Optional[str]:
     """Сохранение загруженного файла"""
+    logger.debug(f"Начало save_uploaded_file для файла: {uploaded_file.name if uploaded_file else 'None'}")
+    if add_upload_log:
+        add_upload_log(f"Начало save_uploaded_file для файла: {uploaded_file.name if uploaded_file else 'None'}", "DEBUG")
     try:
+        if uploaded_file is None:
+            logger.error("uploaded_file is None")
+            if add_upload_log:
+                add_upload_log("Ошибка: файл не был загружен.", "ERROR")
+            st.error("Ошибка: файл не был загружен.")
+            return None
+            
         # Получаем содержимое файла
+        logger.debug(f"Получение содержимого файла: {uploaded_file.name}")
+        if add_upload_log:
+            add_upload_log(f"Получение содержимого файла: {uploaded_file.name}", "DEBUG")
         file_content = uploaded_file.getbuffer()
+        logger.debug(f"Размер содержимого файла: {len(file_content)} байт")
+        if add_upload_log:
+            add_upload_log(f"Размер содержимого файла: {len(file_content)} байт", "DEBUG")
         file_hash = get_file_hash(file_content)
+        logger.debug(f"Хеш файла: {file_hash}")
+        if add_upload_log:
+            add_upload_log(f"Хеш файла: {file_hash}", "DEBUG")
         
         # Проверяем, не загружен ли уже такой файл
+        logger.debug("Проверка на дубликаты файлов")
+        if add_upload_log:
+            add_upload_log("Проверка на дубликаты файлов", "DEBUG")
         for file_id, file_info in st.session_state.metadata.get("files", {}).items():
             if file_info.get("hash") == file_hash:
+                logger.info(f"Файл уже существует в истории: {file_info['filename']}")
+                if add_upload_log:
+                    add_upload_log(f"Файл уже существует в истории: {file_info['filename']}", "INFO")
                 st.info(f"📌 Файл уже существует в истории: {file_info['filename']}")
                 return file_id
         
         # Создаем уникальный ID для файла
         file_id = str(uuid.uuid4())
+        logger.debug(f"Создан уникальный ID файла: {file_id}")
+        if add_upload_log:
+            add_upload_log(f"Создан уникальный ID файла: {file_id}", "DEBUG")
         
         # Сохраняем файл
         file_path = UPLOADED_FILES_DIR / f"{file_id}_{uploaded_file.name}"
+        logger.debug(f"Путь для сохранения файла: {file_path}")
+        if add_upload_log:
+            add_upload_log(f"Путь для сохранения файла: {file_path}", "DEBUG")
+        
+        # Проверяем существование директории
+        if not UPLOADED_FILES_DIR.exists():
+            logger.warning(f"Директория {UPLOADED_FILES_DIR} не существует, создаю её")
+            if add_upload_log:
+                add_upload_log(f"Директория {UPLOADED_FILES_DIR} не существует, создаю её", "WARNING")
+            UPLOADED_FILES_DIR.mkdir(parents=True, exist_ok=True)
+        
         with open(file_path, 'wb') as f:
             f.write(file_content)
+        logger.debug(f"Файл успешно записан: {file_path}")
+        if add_upload_log:
+            add_upload_log(f"Файл успешно записан: {file_path}", "SUCCESS")
         
         # Добавляем в метаданные
         st.session_state.metadata["files"][file_id] = {
@@ -235,11 +304,20 @@ def save_uploaded_file(uploaded_file) -> Optional[str]:
             "hash": file_hash,
             "analysis_count": 0
         }
+        logger.debug(f"Метаданные файла добавлены: {file_id}")
+        if add_upload_log:
+            add_upload_log(f"Метаданные файла добавлены: {file_id}", "DEBUG")
         
         save_metadata(st.session_state.metadata)
+        logger.debug("Метаданные сохранены")
+        if add_upload_log:
+            add_upload_log("Метаданные сохранены", "DEBUG")
         return file_id
         
     except Exception as e:
+        logger.error(f"Ошибка при сохранении файла: {str(e)}", exc_info=True)
+        if add_upload_log:
+            add_upload_log(f"Ошибка при сохранении файла: {str(e)}", "ERROR")
         st.error(f"Ошибка при сохранении файла: {str(e)}")
         return None
 
@@ -455,7 +533,28 @@ def render_header():
 
 def render_new_analysis_tab():
     """Вкладка нового анализа"""
+    logger.debug("Начало render_new_analysis_tab")
     st.markdown("### 📁 Загрузка и анализ нового файла")
+    
+    # Контейнер для логов загрузки
+    upload_log_container = st.expander("🔍 Логи загрузки файла", expanded=True)
+    upload_logs = []
+    
+    def add_upload_log(message: str, level: str = "INFO"):
+        timestamp = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+        log_msg = f"[{timestamp}] [{level}] {message}"
+        upload_logs.append(log_msg)
+        with upload_log_container:
+            if level == "ERROR":
+                st.error(log_msg)
+            elif level == "WARNING":
+                st.warning(log_msg)
+            elif level == "SUCCESS":
+                st.success(log_msg)
+            else:
+                st.text(log_msg)
+    
+    add_upload_log("Ожидание выбора файла...", "INFO")
     
     uploaded_file = st.file_uploader(
         "Выберите FASTQ файл для анализа",
@@ -463,7 +562,12 @@ def render_new_analysis_tab():
         help="Поддерживаются форматы: .fastq, .fq, .fastq.gz, .fq.gz"
     )
     
+    logger.debug(f"st.file_uploader завершен. uploaded_file: {uploaded_file is not None}")
+    add_upload_log(f"st.file_uploader завершен. uploaded_file: {uploaded_file is not None}", "DEBUG")
+    
     if uploaded_file is not None:
+        logger.debug(f"Файл загружен: {uploaded_file.name}, размер: {uploaded_file.size} байт")
+        add_upload_log(f"Файл загружен: {uploaded_file.name}, размер: {uploaded_file.size} байт", "INFO")
         st.markdown("---")
         
         # Информация о файле
@@ -481,17 +585,28 @@ def render_new_analysis_tab():
         
         with col1:
             if st.button("🚀 Начать анализ", type="primary", use_container_width=True):
+                logger.debug("Нажата кнопка 'Начать анализ'")
+                add_upload_log("Нажата кнопка 'Начать анализ'", "INFO")
                 st.session_state.analysis_in_progress = True
                 
                 # Сохраняем файл
-                file_id = save_uploaded_file(uploaded_file)
+                logger.debug("Вызов save_uploaded_file")
+                add_upload_log("Вызов save_uploaded_file", "INFO")
+                file_id = save_uploaded_file(uploaded_file, add_upload_log)
+                logger.debug(f"save_uploaded_file завершен. file_id: {file_id}")
+                add_upload_log(f"save_uploaded_file завершен. file_id: {file_id}", "INFO")
                 
                 if file_id:
                     st.success(f"✅ Файл сохранен с ID: {file_id}")
+                    add_upload_log(f"Файл сохранен с ID: {file_id}", "SUCCESS")
                     
                     # Запускаем анализ
                     st.markdown("---")
+                    logger.debug("Вызов run_analysis_with_save")
+                    add_upload_log("Вызов run_analysis_with_save", "INFO")
                     report_id = run_analysis_with_save(file_id)
+                    logger.debug(f"run_analysis_with_save завершен. report_id: {report_id}")
+                    add_upload_log(f"run_analysis_with_save завершен. report_id: {report_id}", "INFO")
                     
                     if report_id:
                         st.markdown("---")
@@ -502,10 +617,14 @@ def render_new_analysis_tab():
                         
                         # Вместо кнопок показываем текстовое сообщение
                         st.info("📋 Анализ завершен успешно! Перейдите в реестр отчетов для просмотра результатов.")
+                        add_upload_log("Анализ завершен успешно!", "SUCCESS")
                     else:
                         st.error("❌ Не удалось выполнить анализ")
+                        add_upload_log("Не удалось выполнить анализ", "ERROR")
                 
                 st.session_state.analysis_in_progress = False
+                logger.debug("Анализ завершен, analysis_in_progress установлен в False")
+                add_upload_log("Анализ завершен", "INFO")
 
 
 def render_files_history_tab():
@@ -823,12 +942,16 @@ def check_sequali_installation():
 
 def main():
     """Основная функция приложения"""
+    logger.debug("Начало функции main")
     
     # Инициализация
+    logger.debug("Вызов init_directories")
     init_directories()
+    logger.debug("Вызов init_session_state")
     init_session_state()
     
     # Проверка наличия fastqcli.py
+    logger.debug(f"FASTQCLI_AVAILABLE: {FASTQCLI_AVAILABLE}")
     if not FASTQCLI_AVAILABLE:
         st.error("""
         ❌ **Критическая ошибка**: файл `fastqcli.py` не найден!
@@ -840,12 +963,15 @@ def main():
         st.stop()
     
     # Отображение заголовка
+    logger.debug("Вызов render_header")
     render_header()
     
     # Боковая панель
+    logger.debug("Вызов render_sidebar")
     render_sidebar()
     
     # Проверка установки Sequali
+    logger.debug("Вызов check_sequali_installation")
     if not check_sequali_installation():
         st.error("Sequali не установлен. Установите его для продолжения работы.")
         st.stop()
@@ -853,6 +979,7 @@ def main():
     # Убираем проверку полноэкранного режима - теперь это на отдельной странице
     
     # Основной интерфейс с вкладками
+    logger.debug("Создание вкладок")
     tab1, tab2, tab3 = st.tabs([
         "🆕 Новый анализ",
         "📂 История файлов",
@@ -860,12 +987,15 @@ def main():
     ])
     
     with tab1:
+        logger.debug("Отображение вкладки 'Новый анализ'")
         render_new_analysis_tab()
     
     with tab2:
+        logger.debug("Отображение вкладки 'История файлов'")
         render_files_history_tab()
     
     with tab3:
+        logger.debug("Отображение вкладки 'Реестр отчетов'")
         render_reports_registry_tab()
     
     # Футер
@@ -875,6 +1005,7 @@ def main():
         <p>FastQCLI Advanced v3.0.2 | Extended Features | © 2025 TaskContract2025</p>
     </div>
     """, unsafe_allow_html=True)
+    logger.debug("Завершение функции main")
 
 
 if __name__ == "__main__":
